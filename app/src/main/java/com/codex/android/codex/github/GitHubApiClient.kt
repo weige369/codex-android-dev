@@ -281,7 +281,7 @@ class GitHubApiClient(private val context: Context) {
             apiGetArray("/repos/$owner/$repo/pulls?state=$state&per_page=30") { arr ->
                 (0 until arr.length()).map { i ->
                     val item = arr.getJSONObject(i)
-                    val labels = (0 until item.optJSONArray("labels")?.length() ?: 0).map { li ->
+                    val labels = run { val _n = item.optJSONArray("labels")?.length() ?: 0; (0 until _n).map { li ->
                         item.getJSONArray("labels").getJSONObject(li).getString("name")
                     }
                     PullRequest(
@@ -310,7 +310,7 @@ class GitHubApiClient(private val context: Context) {
     suspend fun getPullRequest(owner: String, repo: String, number: Int): Result<PullRequest> =
         withContext(Dispatchers.IO) {
             apiGetObject("/repos/$owner/$repo/pulls/$number") { item ->
-                val labels = (0 until item.optJSONArray("labels")?.length() ?: 0).map { li ->
+                val labels = run { val _n = item.optJSONArray("labels")?.length() ?: 0; (0 until _n).map { li ->
                     item.getJSONArray("labels").getJSONObject(li).getString("name")
                 }
                 PullRequest(
@@ -345,7 +345,7 @@ class GitHubApiClient(private val context: Context) {
                     put("base", base)
                 }
             ) { item ->
-                val labels = (0 until item.optJSONArray("labels")?.length() ?: 0).map { li ->
+                val labels = run { val _n = item.optJSONArray("labels")?.length() ?: 0; (0 until _n).map { li ->
                     item.getJSONArray("labels").getJSONObject(li).getString("name")
                 }
                 PullRequest(
@@ -443,10 +443,10 @@ class GitHubApiClient(private val context: Context) {
                     val item = arr.getJSONObject(i)
                     // Filter out PRs (GitHub returns PRs in issue list too)
                     if (item.has("pull_request")) return@mapNotNull null
-                    val labels = (0 until item.optJSONArray("labels")?.length() ?: 0).map { li ->
+                    val labels = run { val _n = item.optJSONArray("labels")?.length() ?: 0; (0 until _n).map { li ->
                         item.getJSONArray("labels").getJSONObject(li).getString("name")
                     }
-                    val assignees = (0 until item.optJSONArray("assignees")?.length() ?: 0).map { ai ->
+                    val assignees = run { val _n = item.optJSONArray("assignees")?.length() ?: 0; (0 until _n).map { ai ->
                         item.getJSONArray("assignees").getJSONObject(ai).getString("login")
                     }
                     Issue(
@@ -473,10 +473,10 @@ class GitHubApiClient(private val context: Context) {
     suspend fun getIssue(owner: String, repo: String, number: Int): Result<Issue> =
         withContext(Dispatchers.IO) {
             apiGetObject("/repos/$owner/$repo/issues/$number") { item ->
-                val labels = (0 until item.optJSONArray("labels")?.length() ?: 0).map { li ->
+                val labels = run { val _n = item.optJSONArray("labels")?.length() ?: 0; (0 until _n).map { li ->
                     item.getJSONArray("labels").getJSONObject(li).getString("name")
                 }
-                val assignees = (0 until item.optJSONArray("assignees")?.length() ?: 0).map { ai ->
+                val assignees = run { val _n = item.optJSONArray("assignees")?.length() ?: 0; (0 until _n).map { ai ->
                     item.getJSONArray("assignees").getJSONObject(ai).getString("login")
                 }
                 Issue(
@@ -508,7 +508,7 @@ class GitHubApiClient(private val context: Context) {
                     if (labels.isNotEmpty()) put("labels", JSONArray(labels))
                 }
             ) { item ->
-                val labelList = (0 until item.optJSONArray("labels")?.length() ?: 0).map { li ->
+                val labelList = run { val _n = item.optJSONArray("labels")?.length() ?: 0; (0 until _n).map { li ->
                     item.getJSONArray("labels").getJSONObject(li).getString("name")
                 }
                 Issue(
@@ -573,7 +573,7 @@ class GitHubApiClient(private val context: Context) {
             apiPatch("/repos/$owner/$repo/issues/$number",
                 JSONObject().apply { put("state", "closed") }
             ) { item ->
-                val labels = (0 until item.optJSONArray("labels")?.length() ?: 0).map { li ->
+                val labels = run { val _n = item.optJSONArray("labels")?.length() ?: 0; (0 until _n).map { li ->
                     item.getJSONArray("labels").getJSONObject(li).getString("name")
                 }
                 Issue(

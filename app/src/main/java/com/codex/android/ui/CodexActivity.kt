@@ -405,7 +405,7 @@ class CodexActivity : ComponentActivity() {
                                         GitHubPRScreen(
                                             repoFullName = repoInfo.first,
                                             onBack = {
-                                                _currentGitHubRepo?.let { (name, path) ->
+                                                _currentGitHubRepo.value?.let { (name, path) ->
                                                     navigateTo(Screen.GitHubRepo(name, path))
                                                 } ?: navigateTo(Screen.GitHubImport)
                                             }
@@ -423,7 +423,7 @@ class CodexActivity : ComponentActivity() {
                                         GitHubIssueScreen(
                                             repoFullName = repoInfo.first,
                                             onBack = {
-                                                _currentGitHubRepo?.let { (name, path) ->
+                                                _currentGitHubRepo.value?.let { (name, path) ->
                                                     navigateTo(Screen.GitHubRepo(name, path))
                                                 } ?: navigateTo(Screen.GitHubImport)
                                             }
@@ -482,7 +482,7 @@ class CodexActivity : ComponentActivity() {
                                     desc = "Git 操作、PR、Issue",
                                     onClick = {
                                         showMoreMenu = false
-                                        _currentGitHubRepo?.let { (name, path) ->
+                                        _currentGitHubRepo.value?.let { (name, path) ->
                                             navigateTo(Screen.GitHubRepo(name, path))
                                         } ?: navigateTo(Screen.GitHubImport)
                                     }

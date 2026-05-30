@@ -118,6 +118,8 @@ fun GitHubImportScreen(
                     isImporting = isImporting,
                     importLog = importLog,
                     importResult = importResult,
+                    workspaceDir = workspaceDir,
+                    onManageRepo = onManageRepo,
                     onStartImport = {
                         if (repoUrl.isBlank()) return@UrlImportTab
                         isImporting = true
@@ -221,7 +223,9 @@ private fun UrlImportTab(
     isImporting: Boolean,
     importLog: String,
     importResult: String?,
-    onStartImport: () -> Unit
+    onStartImport: () -> Unit,
+    workspaceDir: String = "",
+    onManageRepo: ((fullName: String, localPath: String) -> Unit)? = null
 ) {
     LazyColumn(
         modifier = Modifier.fillMaxSize().padding(16.dp),
