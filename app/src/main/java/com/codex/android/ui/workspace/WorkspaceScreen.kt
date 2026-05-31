@@ -119,102 +119,203 @@ fun WorkspaceScreen(
 
 /**
  * Placeholder shown when Codex is not running.
+ * Redesigned: Codex brand orange + Inter 400 negative tracking + stage progress.
  */
 @Composable
 private fun StartPlaceholder(
     runtimeState: RuntimeState,
     onToggleRuntime: () -> Unit
 ) {
+    val infiniteTransition = rememberInfiniteTransition(label = "brandPulse")
+    val pulseAlpha by infiniteTransition.animateFloat(
+        initialValue = 0.6f,
+        targetValue = 1.0f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1500, easing = EaseInOutSine),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "brandPulseAlpha"
+    )
+    val glowScale by infiniteTransition.animateFloat(
+        initialValue = 0.92f,
+        targetValue = 1.08f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1500, easing = EaseInOutSine),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "brandGlowScale"
+    )
+    var visible by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) { visible = true }
+
+    val currentStage = when (runtimeState) {
+        RuntimeState.STOPPED -> -1
+        RuntimeState.DOWNLOADING -> 0
+        RuntimeState.EXTRACTING -> 1
+        RuntimeState.STARTING -> 2
+        RuntimeState.RUNNING -> 4
+        RuntimeState.ERROR -> -1
+    }
+    val isTransitioning = currentStage in 0..3
+
     Box(
         modifier = Modifier.fillMaxSize(),
         contentAlignment = Alignment.Center
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             if (runtimeState == RuntimeState.STOPPED) {
-                // Welcome / start prompt
-                Surface(
-                    shape = CircleShape,
-                    color = CodexPrimary.copy(alpha = 0.1f),
-                    modifier = Modifier.size(80.dp)
+                AnimatedVisibility(
+                    visible = visible,
+                    enter = fadeIn(animationSpec = tween(600)) + scaleIn(initialScale = 0.8f)
                 ) {
-                    Box(contentAlignment = Alignment.Center) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Surface(
+                                shape = CircleShape,
+                                color = CodexBrandOrange.copy(alpha = 0.08f * pulseAlpha),
+                                modifier = Modifier.size((96 * glowScale).dp)
+                            ) {}
+                            Surface(
+                                shape = CircleShape,
+                                color = CodexBrandOrange.copy(alpha = 0.15f * pulseAlpha),
+                                modifier = Modifier.size((88 * glowAlpha(pulseAlpha)).dp)
+                            ) {}
+                            Surface(
+                                shape = CircleShape,
+                                color = CodexBrandOrange.copy(alpha = 0.12f),
+                                modifier = Modifier.size(80.dp)
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Text(
+                                        "Cx",
+                                        fontSize = 32.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = CodexBrandOrange.copy(alpha = pulseAlpha)
+                                    )
+                                }
+                            }
+                        }
+                        Spacer(Modifier.height(20.dp))
                         Text(
-                            "Cx",
-                            fontSize = 28.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = CodexPrimary
+                            "Codex",
+                            fontSize = 36.sp,
+                            fontWeight = FontWeight.Normal,
+                            fontFamily = FontFamily.SansSerif,
+                            letterSpacing = (-0.02).sp,
+                            color = CodexBrandOrange
+                        )
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            "AI Agent for Android",
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Normal,
+                            color = CodexOnSurfaceVariant
+                        )
+                        Spacer(Modifier.height(36.dp))
+                        Button(
+                            onClick = onToggleRuntime,
+                            shape = ButtonShape,
+                            colors = ButtonDefaults.buttonColors(containerColor = CodexBrandOrange),
+                            contentPadding = PaddingValues(horizontal = 32.dp, vertical = 14.dp)
+                        ) {
+                            Icon(Icons.Filled.PlayArrow, contentDescription = null, modifier = Modifier.size(20.dp))
+                            Spacer(Modifier.width(8.dp))
+                            Text("启动 Codex", fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+                        }
+                        Spacer(Modifier.height(16.dp))
+                        Text(
+                            "Powered by Cursor + Warp aesthetics",
+                            fontSize = 10.sp,
+                            fontFamily = FontFamily.SansSerif,
+                            color = CodexOnSurfaceVariant.copy(alpha = 0.5f)
                         )
                     }
                 }
-                Spacer(Modifier.height(16.dp))
-                Text(
-                    "Codex Android",
-                    fontSize = 20.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onBackground
-                )
-                Spacer(Modifier.height(8.dp))
-                Text(
-                    "AI 编码代理 · 安卓原生",
-                    fontSize = 14.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Spacer(Modifier.height(32.dp))
-                Button(
-                    onClick = onToggleRuntime,
-                    shape = RoundedCornerShape(12.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = CodexPrimary),
-                    contentPadding = PaddingValues(horizontal = 32.dp, vertical = 14.dp)
-                ) {
-                    Icon(Icons.Filled.PlayArrow, contentDescription = null, modifier = Modifier.size(20.dp))
-                    Spacer(Modifier.width(8.dp))
-                    Text("启动 Codex", fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
-                }
-            } else if (runtimeState == RuntimeState.DOWNLOADING) {
-                CircularProgressIndicator(color = CodexPrimary, modifier = Modifier.size(48.dp))
-                Spacer(Modifier.height(16.dp))
-                Text("下载 Codex CLI...", color = MaterialTheme.colorScheme.onSurfaceVariant)
-            } else if (runtimeState == RuntimeState.EXTRACTING) {
-                CircularProgressIndicator(color = CodexPrimary, modifier = Modifier.size(48.dp))
-                Spacer(Modifier.height(16.dp))
-                Text("解压 Codex 二进制...", color = MaterialTheme.colorScheme.onSurfaceVariant)
-            } else if (runtimeState == RuntimeState.STARTING) {
-                CircularProgressIndicator(color = CodexPrimary, modifier = Modifier.size(48.dp))
-                Spacer(Modifier.height(16.dp))
-                Text("正在启动 Codex...", color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-
-            // 显示运行时日志（下载/启动过程中）
-            if (runtimeState == RuntimeState.DOWNLOADING || 
-                runtimeState == RuntimeState.EXTRACTING || 
-                runtimeState == RuntimeState.STARTING ||
-                runtimeState == RuntimeState.ERROR) {
-                val logs by CodexRuntimeService.logs.collectAsState()
-                if (logs.isNotEmpty()) {
-                    Spacer(Modifier.height(16.dp))
-                    Surface(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(150.dp),
-                        shape = RoundedCornerShape(8.dp),
-                        color = Color(0xFF0A0A0F)
-                    ) {
-                        LazyColumn(modifier = Modifier.padding(8.dp)) {
-                            items(logs.takeLast(30)) { logLine ->
+            } else if (isTransitioning) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Surface(
+                            shape = CircleShape,
+                            color = CodexBrandOrange.copy(alpha = 0.08f * pulseAlpha),
+                            modifier = Modifier.size((72 * glowScale).dp)
+                        ) {}
+                        Surface(
+                            shape = CircleShape,
+                            color = CodexBrandOrange.copy(alpha = 0.12f),
+                            modifier = Modifier.size(60.dp)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
                                 Text(
-                                    logLine,
-                                    fontSize = 10.sp,
-                                    fontFamily = FontFamily.Monospace,
-                                    color = Color(0xFF4AF626),
-                                    lineHeight = 14.sp
+                                    "Cx",
+                                    fontSize = 24.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = CodexBrandOrange.copy(alpha = pulseAlpha)
                                 )
                             }
                         }
                     }
+                    Spacer(Modifier.height(24.dp))
+                    Text(
+                        "Codex",
+                        fontSize = 36.sp,
+                        fontWeight = FontWeight.Normal,
+                        fontFamily = FontFamily.SansSerif,
+                        letterSpacing = (-0.02).sp,
+                        color = CodexBrandOrange
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        "AI Agent for Android",
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Normal,
+                        color = CodexOnSurfaceVariant
+                    )
+                    Spacer(Modifier.height(32.dp))
+                    AgentStageProgress(currentStage = currentStage)
+                    Spacer(Modifier.height(24.dp))
+                    LinearProgressIndicator(
+                        modifier = Modifier
+                            .fillMaxWidth(0.6f)
+                            .height(3.dp)
+                            .clip(RoundedCornerShape(2.dp)),
+                        color = CodexBrandOrange,
+                        trackColor = CodexOutline
+                    )
+                    Spacer(Modifier.height(12.dp))
+                    Text(
+                        text = when (runtimeState) {
+                            RuntimeState.DOWNLOADING -> "正在下载 Codex CLI..."
+                            RuntimeState.EXTRACTING -> "正在解压 Linux 环境..."
+                            RuntimeState.STARTING -> "正在启动 Agent..."
+                            else -> "准备中..."
+                        },
+                        fontSize = 13.sp,
+                        color = CodexOnSurfaceVariant
+                    )
+                    val logs by CodexRuntimeService.logs.collectAsState()
+                    if (logs.isNotEmpty()) {
+                        Spacer(Modifier.height(16.dp))
+                        Surface(
+                            modifier = Modifier.fillMaxWidth().height(120.dp),
+                            shape = CardShape,
+                            color = CodexTerminalBg
+                        ) {
+                            LazyColumn(modifier = Modifier.padding(8.dp)) {
+                                items(logs.takeLast(20)) { logLine ->
+                                    Text(logLine, style = TerminalTextStyle, color = Color(0xFF4AF626))
+                                }
+                            }
+                        }
+                    }
+                    Spacer(Modifier.height(16.dp))
+                    Text(
+                        "Powered by Cursor + Warp aesthetics",
+                        fontSize = 10.sp,
+                        fontFamily = FontFamily.SansSerif,
+                        color = CodexOnSurfaceVariant.copy(alpha = 0.5f)
+                    )
                 }
-            }
-            
-            if (runtimeState == RuntimeState.ERROR) {
+            } else if (runtimeState == RuntimeState.ERROR) {
                 Icon(
                     Icons.Filled.ErrorOutline,
                     contentDescription = null,
@@ -223,14 +324,95 @@ private fun StartPlaceholder(
                 )
                 Spacer(Modifier.height(16.dp))
                 Text("启动失败", fontSize = 16.sp, color = StatusError)
-                Spacer(Modifier.height(8.dp))
-                OutlinedButton(onClick = onToggleRuntime) {
-                    Text("重试")
+                val logs by CodexRuntimeService.logs.collectAsState()
+                if (logs.isNotEmpty()) {
+                    Spacer(Modifier.height(12.dp))
+                    Surface(
+                        modifier = Modifier.fillMaxWidth().height(120.dp),
+                        shape = CardShape,
+                        color = CodexTerminalBg
+                    ) {
+                        LazyColumn(modifier = Modifier.padding(8.dp)) {
+                            items(logs.takeLast(20)) { logLine ->
+                                Text(logLine, style = TerminalTextStyle, color = Color(0xFF4AF626))
+                            }
+                        }
+                    }
                 }
+                Spacer(Modifier.height(16.dp))
+                OutlinedButton(onClick = onToggleRuntime, shape = ButtonShape) { Text("重试") }
             }
         }
     }
 }
+
+/**
+ * Agent ready stage progress: Connecting -> Linux -> Codex -> Agent -> Ready
+ */
+@Composable
+private fun AgentStageProgress(currentStage: Int) {
+    val stages = listOf("Connecting", "Linux", "Codex", "Agent", "Ready")
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        stages.forEachIndexed { index, label ->
+            val isCompleted = index < currentStage
+            val isCurrent = index == currentStage
+            Surface(
+                shape = PillShape,
+                color = when {
+                    isCompleted -> CodexBrandOrange.copy(alpha = 0.9f)
+                    isCurrent -> CodexBrandOrange.copy(alpha = 0.15f)
+                    else -> CodexOutline.copy(alpha = 0.3f)
+                }
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(6.dp)
+                            .clip(CircleShape)
+                            .background(
+                                when {
+                                    isCompleted -> Color.White
+                                    isCurrent -> CodexBrandOrange
+                                    else -> CodexOnSurfaceVariant.copy(alpha = 0.4f)
+                                }
+                            )
+                    )
+                    Spacer(Modifier.width(4.dp))
+                    Text(
+                        label,
+                        fontSize = 9.sp,
+                        fontFamily = FontFamily.SansSerif,
+                        fontWeight = if (isCurrent) FontWeight.SemiBold else FontWeight.Normal,
+                        color = when {
+                            isCompleted -> Color.White
+                            isCurrent -> CodexBrandOrange
+                            else -> CodexOnSurfaceVariant.copy(alpha = 0.5f)
+                        }
+                    )
+                }
+            }
+            if (index < stages.lastIndex) {
+                Box(
+                    modifier = Modifier
+                        .width(8.dp)
+                        .height(1.dp)
+                        .background(
+                            if (index < currentStage) CodexBrandOrange.copy(alpha = 0.5f)
+                            else CodexOutline.copy(alpha = 0.3f)
+                        )
+                )
+            }
+        }
+    }
+}
+
+private fun glowAlpha(pulseAlpha: Float): Float = 0.92f + (pulseAlpha - 0.6f) * 0.2f
 
 /**
  * WebView wrapper that handles proper initialization.
