@@ -365,7 +365,7 @@ class CodexRuntimeService : Service() {
 
             // 构建启动命令
             addLog("通过 proot 启动 Codex...")
-            val launchCmd = "codex --unix-daemon --http-port $_wsPort --ws-port $_wsPort"
+            val launchCmd = "codex --unix-daemon --http-port ${_wsPort + 1} --ws-port $_wsPort"
             val cmd = linuxEnv.buildProotCommand(launchCmd)
             val prootEnv = linuxEnv.getProotEnv()
 

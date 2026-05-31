@@ -10,6 +10,7 @@ import java.io.FileOutputStream
 import java.net.HttpURLConnection
 import java.net.URL
 import java.util.zip.GZIPInputStream
+import org.apache.commons.compress.archivers.tar.TarArchiveEntry
 import org.apache.commons.compress.archivers.tar.TarArchiveInputStream
 
 /**
@@ -276,18 +277,49 @@ class LinuxEnvironment(private val context: Context) {
     ) {
         try {
             val totalBytes = archive.length()
+            var processed = 0L
             GZIPInputStream(archive.inputStream()).use { gz ->
                 TarArchiveInputStream(gz).use { tar ->
-                    var entry = tar.nextEntry
-                    var processed = 0L
+                    var entry: TarArchiveEntry? = tar.nextTarEntry
                     while (entry != null) {
-                        val target = File(dest, entry.name)
+                        val entryName = entry.name
+
+                        // H-1: Path traversal protection - reject entries that escape dest
+                        if (entryName.contains("..") || entryName.startsWith("/")) {
+                            Log.w(TAG, "Skipping unsafe tar entry: $entryName")
+                            entry = tar.nextTarEntry
+                            continue
+                        }
+
+                        val target = File(dest, entryName)
+                        // Canonical path check
+                        if (!target.canonicalPath.startsWith(dest.canonicalPath + File.separator) 
+                            && target.canonicalPath != dest.canonicalPath) {
+                            Log.w(TAG, "Skipping path traversal entry: $entryName")
+                            entry = tar.nextTarEntry
+                            continue
+                        }
+
                         if (entry.isDirectory) {
                             target.mkdirs()
                         } else if (entry.isSymbolicLink) {
+                            // Validate symlink target doesn't escape dest
+                            val linkTarget = entry.linkName ?: ""
+                            if (linkTarget.contains("..") || linkTarget.startsWith("/")) {
+                                val linkFile = File(dest, linkTarget)
+                                if (!linkFile.canonicalPath.startsWith(dest.canonicalPath + File.separator)
+                                    && linkFile.canonicalPath != dest.canonicalPath) {
+                                    Log.w(TAG, "Skipping unsafe symlink: $entryName -> $linkTarget")
+                                    entry = tar.nextTarEntry
+                                    continue
+                                }
+                            }
                             try {
-                                Os.symlink(entry.linkName ?: "", target.path)
-                            } catch (_: Exception) {}
+                                target.parentFile?.mkdirs()
+                                Os.symlink(linkTarget, target.path)
+                            } catch (e: Exception) {
+                                Log.w(TAG, "创建符号链接失败: $entryName", e)
+                            }
                         } else {
                             target.parentFile?.mkdirs()
                             FileOutputStream(target).use { out ->
@@ -295,14 +327,19 @@ class LinuxEnvironment(private val context: Context) {
                                 var read: Int
                                 while (tar.read(buffer).also { read = it } != -1) {
                                     out.write(buffer, 0, read)
+                                    processed += read
                                 }
                             }
-                            if (entry.mode and 64 != 0) {
+                            // Preserve executable permission
+                            if (entry.mode and 0o100 != 0) {
                                 target.setExecutable(true, false)
                             }
+                            // Preserve last modified time
+                            if (entry.modTime.time > 0) {
+                                target.setLastModified(entry.modTime.time)
+                            }
                         }
-                        entry = tar.nextEntry
-                        processed = totalBytes - tar.available().toLong()
+                        entry = tar.nextTarEntry
                         onProgress?.invoke(processed, totalBytes)
                     }
                 }

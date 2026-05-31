@@ -186,21 +186,18 @@ class DiagnosticsRunner(private val context: Context) {
             ))
         }
 
-        // Shizuku 检测
-        var shizukuError: Exception? = null
+        // Shizuku 检测（可选，不影响核心功能）
         val hasShizuku = try {
             Class.forName("moe.shizuku.api.ShizukuApi")
             true
-        } catch (e: Exception) {
-            Log.w(TAG, "Shizuku API 类存在性检查失败", e)
-            shizukuError = e
+        } catch (_: Exception) {
             false
         }
         results.add(TestResult(
             "Shizuku API", hasShizuku,
             if (hasShizuku) "可用" else "未安装",
             severity = Severity.INFO,
-            suggestion = if (!hasShizuku && shizukuError != null) "类检查失败：${exceptionSummary(shizukuError)}" else ""
+            suggestion = if (!hasShizuku) "Shizuku 非必需，proot 模式可正常使用 Linux 环境" else ""
         ))
 
         return results
@@ -223,14 +220,16 @@ class DiagnosticsRunner(private val context: Context) {
             suggestion = if (!hasInternet) "请连接网络" else ""
         ))
 
-        // GitHub API 可达性
+        // GitHub API 可达性（api.github.com 根路径不一定返回200，接受 2xx/3xx/4xx 均视为可达）
         var githubError: Exception? = null
         val githubReachable = try {
             val url = java.net.URL("https://api.github.com")
             val conn = url.openConnection() as java.net.HttpURLConnection
             conn.connectTimeout = 5000
             conn.readTimeout = 5000
-            conn.responseCode == 200
+            conn.instanceFollowRedirects = true
+            val code = conn.responseCode
+            code in 200..499  // 只要能连上就算可达（401/403/404 都说明网络通了）
         } catch (e: Exception) {
             Log.w(TAG, "GitHub API 可达性探测失败", e)
             githubError = e
@@ -243,7 +242,7 @@ class DiagnosticsRunner(private val context: Context) {
                 githubError != null -> "连接失败: ${exceptionSummary(githubError)}"
                 else -> "连接失败 (HTTP 非 200)"
             },
-            severity = if (githubReachable) Severity.INFO else Severity.ERROR,
+            severity = if (githubReachable) Severity.INFO else Severity.WARNING,
             suggestion = if (!githubReachable) "检查网络或防火墙" else ""
         ))
 
