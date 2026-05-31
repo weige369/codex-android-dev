@@ -14,6 +14,7 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
@@ -615,6 +616,9 @@ fun CodexMainLayout(
         gesturesEnabled = true,
     ) {
         // Main content with elastic transform when drawer opens
+        val density = LocalDensity.current
+        val yOffsetPx = with(density) { 12.dp.toPx() }
+        val shadowElevationPx = with(density) { 24.dp.toPx() }
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -623,7 +627,7 @@ fun CodexMainLayout(
                     val shiftRatio = 0.82f
                     translationX = size.width * shiftRatio * drawerFraction
                     // Subtle Y-axis offset
-                    translationY = with(androidx.compose.ui.platform.LocalDensity.current) { 12.dp.toPx() } * drawerFraction
+                    translationY = yOffsetPx * drawerFraction
                     // Scale down 8%
                     scaleX = 1f - 0.08f * drawerFraction
                     scaleY = 1f - 0.08f * drawerFraction
@@ -637,9 +641,7 @@ fun CodexMainLayout(
                     }
                     clip = drawerFraction > 0.01f
                     // Shadow
-                    shadowElevation = with(androidx.compose.ui.platform.LocalDensity.current) {
-                        24.dp.toPx() * drawerFraction
-                    }
+                    shadowElevation = shadowElevationPx * drawerFraction
                     ambientShadowColor = Color.Black.copy(alpha = 0.3f * drawerFraction)
                     spotShadowColor = Color.Black.copy(alpha = 0.2f * drawerFraction)
                 }
@@ -890,7 +892,7 @@ private fun DrawerNavItem(
                         .height(2.dp)
                         .padding(horizontal = 24.dp)
                         .drawBehind {
-                            drawRect(
+                            drawRoundRect(
                                 color = accentColor,
                                 cornerRadius = androidx.compose.ui.geometry.CornerRadius(1.dp.toPx()),
                             )
