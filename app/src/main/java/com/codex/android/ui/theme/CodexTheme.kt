@@ -78,7 +78,8 @@ fun CodexTheme(
 
     MaterialTheme(
         colorScheme = colorScheme,
-        typography = Typography(),
+        typography = CodexTypography,
+        shapes = CodexShapes,
         content = content
     )
 }
