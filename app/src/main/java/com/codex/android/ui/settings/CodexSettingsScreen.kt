@@ -336,7 +336,7 @@ fun CodexSettingsScreen(
                 ) {
                     Column(modifier = Modifier.padding(8.dp)) {
                         if (onOpenApiProvider != null) {
-                            SettingsItem(
+                            SettingsNavItem(
                                 icon = Icons.Default.SmartToy,
                                 title = "AI 提供商",
                                 subtitle = "配置 DeepSeek / OpenAI / SiliconFlow 等",
