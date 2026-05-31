@@ -35,7 +35,7 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.lifecycle.viewmodel.compose.viewModel
+// ViewModel manually instantiated - no lifecycle-viewmodel-compose dependency
 import com.codex.android.environment.ProotEnvironment
 import com.codex.android.ui.theme.CodexPrimary
 import com.codex.android.ui.theme.UbuntuOrange
@@ -58,7 +58,7 @@ fun SetupWizardScreen(
     onSkip: () -> Unit
 ) {
     val context = LocalContext.current
-    val viewModel: SetupWizardViewModel = viewModel()
+    val viewModel = remember { SetupWizardViewModel() }
     val scope = rememberCoroutineScope()
 
     // 初始化 ViewModel
