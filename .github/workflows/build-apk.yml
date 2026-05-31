@@ -1,7 +1,7 @@
 name: Android APK Build
 on:
   push:
-    branches: [main, feat/ui-design-upgrade, fix/security-round2, feat/agent-architecture]
+    branches: [main, feat/ui-design-upgrade, fix/security-round2, feat/agent-architecture, fix/native-agent-service]
   pull_request:
   workflow_dispatch:
     inputs:
