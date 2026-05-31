@@ -331,7 +331,7 @@ class LinuxEnvironment(private val context: Context) {
                                 }
                             }
                             // Preserve executable permission
-                            if (entry.mode and 0o100 != 0) {
+                            if (entry.mode and 0x40 != 0) {
                                 target.setExecutable(true, false)
                             }
                             // Preserve last modified time
