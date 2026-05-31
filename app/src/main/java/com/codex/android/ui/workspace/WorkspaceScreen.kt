@@ -100,7 +100,8 @@ fun WorkspaceScreen(
                 .weight(1f)
         ) {
             // Native API mode: use Compose chat interface instead of WebView
-            val nativeAgent = remember { NativeAgentService.getInstance(LocalContext.current) }
+            val ctx = LocalContext.current
+            val nativeAgent = remember(ctx) { NativeAgentService.getInstance(ctx) }
             if (runtimeState == RuntimeState.NATIVE_MODE) {
                 NativeChatView(
                     agent = nativeAgent,
