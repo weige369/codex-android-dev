@@ -7,6 +7,7 @@ import android.os.Build
 import android.os.IBinder
 import android.util.Log
 import androidx.core.app.NotificationCompat
+import com.codex.android.agent.NativeAgentService
 import com.codex.android.codex.CodexManager
 import com.codex.android.util.AndroidShellExecutor
 import com.codex.android.util.DevelopmentEnvironment
@@ -24,15 +25,20 @@ enum class RuntimeState {
     EXTRACTING,
     STARTING,
     RUNNING,
+    NATIVE_MODE,  // 新增：原生 API 模式（无需外部二进制）
     ERROR
 }
 
 /**
- * 前台服务，管理 Codex CLI 运行时生命周期。
+ * 前台服务，管理 Codex 运行时生命周期。
  *
- * 运行策略：
- * 1. 自包含 Linux (proot) → 在 proot Ubuntu 中运行
- * 2. 自包含模式 → 尝试直接运行（功能受限）
+ * 运行策略（按优先级）：
+ * 1. 原生 API 模式 → 直接在进程内调用 OpenAI 兼容 API（推荐，无需外部二进制）
+ * 2. proot Linux 模式 → 在 proot Ubuntu 中运行 Codex CLI（实验性）
+ * 3. 直接运行 → 尝试直接执行 Codex 二进制（Android 36 几乎不可能）
+ *
+ * 学习 Operit 的核心经验：AI Agent 不需要外部二进制，
+ * 直接在 Kotlin 进程内调用 API + 执行工具即可。
  */
 class CodexRuntimeService : Service() {
 
@@ -79,6 +85,7 @@ class CodexRuntimeService : Service() {
     private val logsLock = Any()
     private lateinit var codexManager: CodexManager
     private lateinit var devEnv: DevelopmentEnvironment
+    private lateinit var nativeAgent: NativeAgentService
     private var codexProcess: java.lang.Process? = null
     @Volatile
     private var isRunning = false
@@ -87,6 +94,7 @@ class CodexRuntimeService : Service() {
         super.onCreate()
         codexManager = CodexManager(this)
         devEnv = DevelopmentEnvironment(this)
+        nativeAgent = NativeAgentService.getInstance(this)
         AndroidShellExecutor.init(this)
         createNotificationChannel()
         addLog("CodexRuntimeService 已创建")
@@ -119,113 +127,73 @@ class CodexRuntimeService : Service() {
 
     private suspend fun startCodex() {
         if (isRunning) {
-            addLog("Codex 已在运行中")
+            addLog("Codex 已在运行中 (模式: $_runningMode)")
             return
         }
 
         try {
-            // 检测运行环境
+            _state.value = RuntimeState.STARTING
+            addLog("开始启动 Codex...")
+
+            // ===== 策略 1（推荐）：原生 API 模式 =====
+            // 学习 Operit：直接在 Kotlin 进程内调用 AI API，无需外部二进制
+            if (nativeAgent.isConfigured()) {
+                addLog("检测到 API 配置，使用原生 API 模式")
+                addLog("提供商: ${nativeAgent.getProviderId()}, 模型: ${nativeAgent.getApiModel()}")
+
+                // 测试 API 连通性
+                val connected = nativeAgent.testConnection()
+                if (connected) {
+                    startNativeMode()
+                    return
+                } else {
+                    addLog("⚠️ API 连接测试失败，尝试其他模式...")
+                }
+            } else {
+                addLog("未配置 API Key，跳过原生 API 模式")
+                addLog("💡 提示：在设置页面配置 AI 提供商即可直接使用，无需安装任何二进制")
+            }
+
+            // ===== 策略 2：proot Linux 模式（实验性） =====
             val linuxEnv = LinuxEnvironment(this)
             val linuxInfo = linuxEnv.getInfo()
-            val hasSelfContainedLinux = linuxInfo.state == LinuxEnvironment.EngineState.READY
+            val hasProotLinux = linuxInfo.state == LinuxEnvironment.EngineState.READY
 
-            _runningMode = if (hasSelfContainedLinux) {
-                addLog("自包含 Linux 环境已就绪，将通过 proot 运行 Codex")
-                "proot-linux"
-            } else {
-                addLog("自包含模式（未安装 Linux 环境，无法运行 Codex）")
-                "direct"
-            }
-            addLog("运行环境: $_runningMode")
-
-            // 下载/验证二进制
-            _state.value = RuntimeState.STARTING
-            addLog("检查 Codex 二进制文件...")
-
-            if (hasSelfContainedLinux && codexManager.isInstalled()) {
-                // 自包含 Linux 模式：将 Codex 二进制复制到 rootfs 中运行
-                addLog("自包含 Linux 模式启动...")
-                _state.value = RuntimeState.STARTING
+            if (hasProotLinux && codexManager.isInstalled()) {
+                addLog("检测到 proot Linux + Codex 二进制，尝试 proot 模式...")
+                _runningMode = "proot-linux"
                 startCodexInProot(linuxInfo)
                 return
             }
 
-            if (!codexManager.isInstalled()) {
-                _state.value = RuntimeState.DOWNLOADING
-                addLog("需要下载 Codex CLI...")
+            // ===== 策略 3：直接运行（最后手段） =====
+            if (codexManager.isInstalled()) {
+                addLog("尝试直接运行 Codex 二进制...")
+                _runningMode = "direct"
 
-                val success = withContext(Dispatchers.IO) {
-                    codexManager.downloadWithProgress { progress, total ->
-                        val pct = if (total > 0) (progress * 100 / total) else 0
-                        addLog("下载进度: $pct%")
-                        updateNotification("下载 Codex... $pct%")
-                    }
-                }
-
-                if (!success) {
-                    _state.value = RuntimeState.ERROR
-                    addLog("Codex 下载失败")
-                    updateNotification("Codex 下载失败")
+                val probe = codexManager.testDirectExecution()
+                if (probe.success) {
+                    addLog("自检通过：${probe.message}")
+                    // 需要先下载/解压
+                    _state.value = RuntimeState.STARTING
+                    startDirect()
                     return
+                } else {
+                    addLog("直接运行不可用: ${probe.message}")
                 }
-
-                _state.value = RuntimeState.EXTRACTING
-                addLog("正在解压 Codex CLI...")
-                updateNotification("正在解压 Codex CLI...")
-
-                if (!codexManager.extractBinary()) {
-                    _state.value = RuntimeState.ERROR
-                    addLog("Codex 解压失败")
-                    updateNotification("Codex 解压失败")
-                    return
-                }
-
-                addLog("Codex 二进制就绪: ${codexManager.codexBinary.length()} bytes")
             }
 
-            if (!codexManager.verifyBinary()) {
-                addLog("二进制验证失败，重新下载...")
-                codexManager.cleanup()
-                _state.value = RuntimeState.ERROR
-                updateNotification("Codex 二进制损坏")
-                return
-            }
+            // ===== 无可用模式 =====
+            addLog("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+            addLog("❌ 所有启动模式均不可用")
+            addLog("")
+            addLog("推荐操作：在设置页面配置 AI 提供商")
+            addLog("支持: DeepSeek / OpenAI / SiliconFlow / 智谱 / Moonshot")
+            addLog("配置后无需安装任何二进制即可使用")
+            addLog("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 
-            if (!codexManager.getConfigFile().exists()) {
-                codexManager.createDefaultConfig()
-                addLog("已创建默认配置")
-            }
-
-            codexManager.workspaceDir.mkdirs()
-            _wsPort = findFreePort(DEFAULT_WS_PORT)
-            addLog("WebSocket 端口: $_wsPort")
-
-            // 启动 Codex
-            _state.value = RuntimeState.STARTING
-            addLog("正在启动 Codex exec-server...")
-            updateNotification("正在启动 Codex...")
-
-            when (_runningMode) {
-                "proot-linux" -> { } // already handled above
-                else -> startDirect()
-            }
-
-            // 等待确认
-            delay(3000)
-
-            if (codexProcess?.isAlive == true) {
-                _state.value = RuntimeState.RUNNING
-                addLog("Codex exec-server 已启动 ($_runningMode)")
-                updateNotification("Codex 已就绪")
-                broadcastStatus()
-            } else {
-                val exitCode = codexProcess?.exitValue() ?: -1
-                _state.value = RuntimeState.ERROR
-                addLog("Codex 进程异常退出 (exit=$exitCode)")
-                addLog("请先在环境页面安装 Linux 环境")
-                updateNotification("Codex 启动失败")
-                isRunning = false
-            }
+            _state.value = RuntimeState.ERROR
+            updateNotification("请配置 AI 提供商")
 
         } catch (e: Exception) {
             _state.value = RuntimeState.ERROR
@@ -236,33 +204,109 @@ class CodexRuntimeService : Service() {
     }
 
     /**
-     * 在 Ubuntu proot 中启动 Codex
+     * 原生 API 模式启动（推荐）。
+     * 无需外部二进制，直接在 Kotlin 进程内完成 AI Agent 闭环。
      */
+    private fun startNativeMode() {
+        _runningMode = "native-api"
+        nativeAgent.markReady()
+        isRunning = true
+        _state.value = RuntimeState.NATIVE_MODE
+        addLog("✅ Codex 原生 API 模式已就绪")
+        addLog("   无需外部二进制，直接调用 AI API")
+        addLog("   提供商: ${nativeAgent.getProviderId()}")
+        addLog("   模型: ${nativeAgent.getApiModel()}")
+        updateNotification("Codex 已就绪（原生 API）")
+        broadcastStatus()
+    }
 
     /**
-     * 在 Termux 中启动 Codex
+     * 在 Ubuntu proot 中启动 Codex
      */
+    private suspend fun startCodexInProot(linuxInfo: LinuxEnvironment.LinuxEnvInfo) {
+        try {
+            val linuxEnv = LinuxEnvironment(this)
+
+            addLog("安装 Codex 到 proot rootfs...")
+            val rootfsBin = File(linuxInfo.rootfsPath, "/usr/local/bin")
+            rootfsBin.mkdirs()
+            codexManager.codexBinary.inputStream().use { input ->
+                File(rootfsBin, "codex").outputStream().use { output ->
+                    input.copyTo(output)
+                }
+            }
+            File(rootfsBin, "codex").setExecutable(true)
+
+            addLog("通过 proot 启动 Codex...")
+            val launchCmd = "codex --unix-daemon --http-port ${_wsPort + 1} --ws-port $_wsPort"
+            val cmd = linuxEnv.buildProotCommand(launchCmd)
+            val prootEnv = linuxEnv.getProotEnv()
+
+            codexProcess = ProcessBuilder(cmd)
+                .apply {
+                    environment().putAll(prootEnv)
+                    redirectErrorStream(false)
+                }
+                .start()
+            isRunning = true
+
+            serviceScope.launch {
+                try {
+                    codexProcess?.inputStream?.bufferedReader()?.use { reader ->
+                        reader.lines().forEach { line ->
+                            addLog("[Codex-proot] $line")
+                            if (line.contains("listening", ignoreCase = true) ||
+                                line.contains("started", ignoreCase = true) ||
+                                line.contains("ready", ignoreCase = true)) {
+                                _state.value = RuntimeState.RUNNING
+                                updateNotification("Codex 已就绪 (proot Linux)")
+                                broadcastStatus()
+                            }
+                        }
+                    }
+                } catch (e: Exception) {
+                    addLog("Codex proot 输出流已关闭: ${e.message}")
+                }
+            }
+
+            // 等待启动
+            delay(5000)
+
+            if (codexProcess?.isAlive == true) {
+                _state.value = RuntimeState.RUNNING
+                addLog("Codex proot 模式已启动")
+                updateNotification("Codex 已就绪 (proot)")
+                broadcastStatus()
+            } else {
+                val exit = codexProcess?.exitValue() ?: -1
+                addLog("Codex proot 进程异常退出 (exit=$exit)")
+                addLog("💡 建议切换到原生 API 模式：在设置中配置 AI 提供商")
+                _state.value = RuntimeState.ERROR
+                updateNotification("proot 模式失败，请配置 API")
+                isRunning = false
+            }
+        } catch (e: Exception) {
+            addLog("proot 模式启动失败: ${e.message}")
+            addLog("💡 建议切换到原生 API 模式：在设置中配置 AI 提供商")
+            _state.value = RuntimeState.ERROR
+            updateNotification("Codex 启动失败（proot）")
+        }
+    }
 
     /**
      * 直接启动（Android 原生，失败率高）
      */
     private suspend fun startDirect() {
         addLog("尝试直接运行 Codex...")
-        // 先做可行性自检：能否直接执行该二进制
         val probe = codexManager.testDirectExecution()
         if (!probe.success) {
             addLog("直接运行不可用: ${probe.message}")
-            addLog("Codex CLI 二进制编译目标为 Linux musl")
-            if (probe.sdkInt >= 29) {
-                addLog("Android ${probe.sdkInt} 禁止执行应用私有目录中的可执行文件（W^X）")
-            }
-            addLog("请在'环境'页面安装 内置 Linux 后重试")
+            addLog("💡 建议切换到原生 API 模式：在设置中配置 AI 提供商")
             _state.value = RuntimeState.ERROR
-            updateNotification("需要 Termux 环境")
+            updateNotification("需要 API 配置")
             return
         }
 
-        addLog("直接运行自检通过：${probe.message}")
         try {
             val process = ProcessBuilder(
                 codexManager.codexBinary.absolutePath,
@@ -278,7 +322,7 @@ class CodexRuntimeService : Service() {
             }.start()
             codexProcess = process
             isRunning = true
-            addLog("已直接启动 Codex exec-server（自包含模式）")
+            addLog("已直接启动 Codex exec-server")
 
             serviceScope.launch {
                 try {
@@ -299,7 +343,7 @@ class CodexRuntimeService : Service() {
                 }
             }
         } catch (e: Exception) {
-            addLog("直接启动 exec-server 失败: ${e.message}")
+            addLog("直接启动失败: ${e.message}")
             _state.value = RuntimeState.ERROR
             updateNotification("Codex 启动失败")
         }
@@ -313,94 +357,9 @@ class CodexRuntimeService : Service() {
             codexProcess?.waitFor(5, java.util.concurrent.TimeUnit.SECONDS)
         } catch (e: Exception) { Log.w(TAG, "停止 Codex 进程时出错", e) }
         codexProcess = null
+        nativeAgent.cancelStream()
         _state.value = RuntimeState.STOPPED
         addLog("Codex 已停止")
-    }
-
-
-    /**
-     * 通用的 Codex 进程启动方法
-     */
-    private suspend fun startCodexProcess(launchCmd: String, modeName: String) {
-        addLog("安装 Codex 到 $modeName 环境...")
-
-        isRunning = true
-
-        serviceScope.launch {
-            try {
-                codexProcess?.inputStream?.bufferedReader()?.use { reader ->
-                    reader.lines().forEach { line ->
-                        addLog("[Codex] $line")
-                        if (line.contains("listening", ignoreCase = true) ||
-                            line.contains("started", ignoreCase = true) ||
-                            line.contains("ready", ignoreCase = true)) {
-                            _state.value = RuntimeState.RUNNING
-                            updateNotification("Codex 已就绪")
-                            broadcastStatus()
-                        }
-                    }
-                }
-            } catch (e: Exception) {
-                addLog("Codex 输出流已关闭: ${e.message}")
-            }
-        }
-    }
-    /**
-     * 在自包含 Linux（proot）环境中启动 Codex
-     */
-    private suspend fun startCodexInProot(linuxInfo: LinuxEnvironment.LinuxEnvInfo) {
-        try {
-            val linuxEnv = LinuxEnvironment(this)
-            
-            // 将 Codex 二进制复制到 rootfs 中
-            addLog("安装 Codex 到 proot rootfs...")
-            val rootfsBin = File(linuxInfo.rootfsPath, "/usr/local/bin")
-            rootfsBin.mkdirs()
-            codexManager.codexBinary.inputStream().use { input ->
-                File(rootfsBin, "codex").outputStream().use { output ->
-                    input.copyTo(output)
-                }
-            }
-            File(rootfsBin, "codex").setExecutable(true)
-
-            // 构建启动命令
-            addLog("通过 proot 启动 Codex...")
-            val launchCmd = "codex --unix-daemon --http-port ${_wsPort + 1} --ws-port $_wsPort"
-            val cmd = linuxEnv.buildProotCommand(launchCmd)
-            val prootEnv = linuxEnv.getProotEnv()
-
-            codexProcess = ProcessBuilder(cmd)
-                .apply {
-                    environment().putAll(prootEnv)
-                    redirectErrorStream(false)
-                }
-                .start()
-            isRunning = true
-
-            // 监控输出
-            serviceScope.launch {
-                try {
-                    codexProcess?.inputStream?.bufferedReader()?.use { reader ->
-                        reader.lines().forEach { line ->
-                            addLog("[Codex-proot] $line")
-                            if (line.contains("listening", ignoreCase = true) ||
-                                line.contains("started", ignoreCase = true) ||
-                                line.contains("ready", ignoreCase = true)) {
-                                _state.value = RuntimeState.RUNNING
-                                updateNotification("Codex 已就绪 (自包含 Linux)")
-                                broadcastStatus()
-                            }
-                        }
-                    }
-                } catch (e: Exception) {
-                    addLog("Codex proot 输出流已关闭: ${e.message}")
-                }
-            }
-        } catch (e: Exception) {
-            addLog("自包含 Linux 启动失败: ${e.message}")
-            _state.value = RuntimeState.ERROR
-            updateNotification("Codex 启动失败（自包含 Linux）")
-        }
     }
 
     private fun broadcastStatus() {
@@ -440,7 +399,6 @@ class CodexRuntimeService : Service() {
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
 
-        // 停止按钮
         val stopIntent = PendingIntent.getService(
             this, 1,
             Intent(this, CodexRuntimeService::class.java).apply { action = ACTION_STOP },

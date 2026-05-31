@@ -149,10 +149,44 @@ fun DevEnvironmentScreen(
                     onAction = {
                             isInstalling = true
                             installLog = ""
-                            currentAction = "tools"
+                            currentAction = "安装开发工具"
                             scope.launch {
-                                // Dev tools need Termux - show guide
-                                installLog = "\n请在内置 Linux 环境中安装开发工具:\n  apt install nodejs python3 git"
+                                val linuxEnv = LinuxEnvironment(context)
+                                val linuxInfo = linuxEnv.getInfo()
+                                if (linuxInfo.state != LinuxEnvironment.EngineState.READY) {
+                                    installLog = "❌ 请先安装 Linux 环境（proot + Ubuntu）"
+                                    isInstalling = false
+                                    currentAction = null
+                                    return@launch
+                                }
+
+                                installLog = "正在通过 proot 安装开发工具...
+"
+                                val tools = listOf(
+                                    "apt-get update" to "更新软件源",
+                                    "apt-get install -y nodejs" to "安装 Node.js",
+                                    "apt-get install -y python3 python3-pip" to "安装 Python3",
+                                    "apt-get install -y git" to "安装 Git",
+                                )
+
+                                for ((cmd, name) in tools) {
+                                    installLog = installLog + "
+▸ $name..."
+                                    val result = linuxEnv.runCommand(cmd, 120_000)
+                                    if (result.exitCode == 0) {
+                                        installLog = installLog + " ✅"
+                                    } else {
+                                        installLog = installLog + " ❌ (exit=${result.exitCode})"
+                                        if (result.stderr.isNotBlank()) {
+                                            installLog = installLog + "
+  ${result.stderr.take(200)}"
+                                        }
+                                    }
+                                }
+
+                                installLog = installLog + "
+
+安装完成!"
                                 envInfo = devEnv.getEnvironmentInfo()
                                 isInstalling = false
                                 currentAction = null

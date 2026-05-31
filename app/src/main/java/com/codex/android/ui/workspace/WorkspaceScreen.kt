@@ -65,7 +65,7 @@ fun WorkspaceScreen(
     onToggleRuntime: () -> Unit,
     onExportFile: ((String) -> Unit)? = null
 ) {
-    val isRunning = runtimeState == RuntimeState.RUNNING
+    val isRunning = runtimeState == RuntimeState.RUNNING || runtimeState == RuntimeState.NATIVE_MODE
     val isStarting = runtimeState == RuntimeState.STARTING ||
                      runtimeState == RuntimeState.DOWNLOADING ||
                      runtimeState == RuntimeState.EXTRACTING
@@ -171,6 +171,7 @@ private fun StartPlaceholder(
         RuntimeState.EXTRACTING -> 1
         RuntimeState.STARTING -> 2
         RuntimeState.RUNNING -> 4
+        RuntimeState.NATIVE_MODE -> 4
         RuntimeState.ERROR -> -1
     }
     val isTransitioning = currentStage in 0..3

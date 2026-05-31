@@ -41,6 +41,8 @@ import com.codex.android.ui.files.FileBrowserScreen
 import com.codex.android.ui.github.GitHubImportScreen
 import com.codex.android.ui.mcp.CodexMCPScreen
 import com.codex.android.ui.settings.CodexSettingsScreen
+import com.codex.android.ui.settings.ApiProviderScreen
+import com.codex.android.agent.NativeAgentService
 import com.codex.android.ui.skills.CodexSkillsScreen
 import com.codex.android.ui.theme.CodexTheme
 import com.codex.android.ui.theme.BottomNavBackground
@@ -95,6 +97,7 @@ class CodexActivity : ComponentActivity() {
         data object DevEnvironment : Screen()
         data object Diagnostic : Screen()
         data object About : Screen()
+        data object ApiProvider : Screen()
         data object SetupWizard : Screen()
         data class GitHubRepo(val repoFullName: String, val localPath: String) : Screen()
         data object GitHubPRList : Screen()
@@ -323,6 +326,7 @@ class CodexActivity : ComponentActivity() {
                                     onOpenDiagnostic = { navigateTo(Screen.Diagnostic) },
                                     onOpenFileBrowser = { navigateTo(Screen.FileBrowser) },
                                     onOpenAbout = { navigateTo(Screen.About) },
+                                    onOpenApiProvider = { navigateTo(Screen.ApiProvider) },
                                     onToggleRuntime = {
                                         if (isRunning) {
                                             CodexRuntimeService.stop(this@CodexActivity)
@@ -347,7 +351,8 @@ class CodexActivity : ComponentActivity() {
                                     onOpenMCP = { navigateTo(Screen.MCP) },
                                     onOpenGitHub = { navigateTo(Screen.GitHubImport) },
                                     onOpenDiagnostic = { navigateTo(Screen.Diagnostic) },
-                                    onOpenAbout = { navigateTo(Screen.About) }
+                                    onOpenAbout = { navigateTo(Screen.About) },
+                                    onOpenApiProvider = { navigateTo(Screen.ApiProvider) }
                                 )
                                 Screen.Skills -> CodexSkillsScreen(
                                     onBack = { navigateTo(Screen.Settings) }

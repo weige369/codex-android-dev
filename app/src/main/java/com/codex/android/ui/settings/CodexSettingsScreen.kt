@@ -44,7 +44,8 @@ fun CodexSettingsScreen(
     onOpenMCP: (() -> Unit)? = null,
     onOpenGitHub: (() -> Unit)? = null,
     onOpenDiagnostic: (() -> Unit)? = null,
-    onOpenAbout: (() -> Unit)? = null
+    onOpenAbout: (() -> Unit)? = null,
+    onOpenApiProvider: (() -> Unit)? = null
 ) {
     val context = LocalContext.current
     val codexManager = remember { CodexManager(context) }
@@ -334,6 +335,14 @@ fun CodexSettingsScreen(
                     )
                 ) {
                     Column(modifier = Modifier.padding(8.dp)) {
+                        if (onOpenApiProvider != null) {
+                            SettingsItem(
+                                icon = Icons.Default.SmartToy,
+                                title = "AI 提供商",
+                                subtitle = "配置 DeepSeek / OpenAI / SiliconFlow 等",
+                                onClick = onOpenApiProvider
+                            )
+                        }
                         if (onOpenSkills != null) {
                             SettingsNavItem(
                                 Icons.Default.Extension,
