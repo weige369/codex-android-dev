@@ -812,7 +812,7 @@ class GitHubApiClient(private val context: Context) {
             try {
                 rateLimit()
             val tokenResult = getToken()
-            if (tokenResult.isFailure) return Result.failure(tokenResult.exceptionOrNull()!!)
+            if (tokenResult.isFailure) return@retryWithBackoff Result.failure(tokenResult.exceptionOrNull()!!)
 
             val url = URL("$API_BASE$endpoint")
             val conn = url.openConnection() as HttpURLConnection
@@ -844,7 +844,7 @@ class GitHubApiClient(private val context: Context) {
             try {
                 rateLimit()
             val tokenResult = getToken()
-            if (tokenResult.isFailure) return Result.failure(tokenResult.exceptionOrNull()!!)
+            if (tokenResult.isFailure) return@retryWithBackoff Result.failure(tokenResult.exceptionOrNull()!!)
 
             val url = URL("$API_BASE$endpoint")
             val conn = url.openConnection() as HttpURLConnection
