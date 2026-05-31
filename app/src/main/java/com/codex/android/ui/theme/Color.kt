@@ -21,6 +21,7 @@ val CodexCodeBg = Color(0xFF1A1A2E)  // Code block background
 
 // Linux/Ubuntu orange brand
 val UbuntuOrange = Color(0xFFE95420)
+val CodexBrandOrange = Color(0xFFF54E00)  // Cursor-style warm orange
 
 // Replit-inspired colors
 val ReplitGreen = Color(0xFF2ED573)
@@ -37,3 +38,9 @@ val StatusError = Color(0xFFD63031)
 // Android system colors
 val BottomNavBackground = Color(0xFF1A1A2E)
 val BottomNavInactive = Color(0xFF636E80)
+
+
+// Warp-style warm palette
+val CodexCanvas = Color(0xFFF7F5F0)  // Warm cream canvas
+val CodexInk = Color(0xFF26251E)  // Warm dark ink
+val CodexHairline = Color(0xFFE6E5E0)  // Subtle divider
