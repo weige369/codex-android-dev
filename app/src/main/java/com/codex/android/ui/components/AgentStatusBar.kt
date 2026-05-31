@@ -67,7 +67,7 @@ fun AgentStatusBar(
         label = "glowAlphaAnim"
     )
 
-    val isRunning = state == RuntimeState.RUNNING
+    val isRunning = state == RuntimeState.RUNNING || state == RuntimeState.NATIVE_MODE
     val isConnecting = state == RuntimeState.STARTING ||
                        state == RuntimeState.DOWNLOADING ||
                        state == RuntimeState.EXTRACTING
@@ -257,6 +257,10 @@ private fun StatusBadge(
             Triple("下载中", CodexBrandOrange.copy(alpha = 0.15f), CodexBrandOrange)
         state == RuntimeState.EXTRACTING ->
             Triple("解压中", CodexBrandOrange.copy(alpha = 0.15f), CodexBrandOrange)
+        state == RuntimeState.NATIVE_MODE ->
+            Triple("API模式", CodexBrandOrange.copy(alpha = 0.15f), CodexBrandOrange)
+        state == RuntimeState.NATIVE_MODE ->
+            Triple("解压中", CodexBrandOrange.copy(alpha = 0.15f), CodexBrandOrange)
         else ->
             Triple("已停止", StatusOffline.copy(alpha = 0.15f), StatusOffline)
     }
@@ -284,6 +288,7 @@ private fun statusText(state: RuntimeState, connected: Boolean): String {
         RuntimeState.STARTING -> "正在启动..."
         RuntimeState.RUNNING -> if (connected) "Codex 运行中" else "Codex 已启动"
         RuntimeState.ERROR -> "Codex 运行异常"
+        RuntimeState.NATIVE_MODE -> "Codex 原生 API 模式"
     }
 }
 
