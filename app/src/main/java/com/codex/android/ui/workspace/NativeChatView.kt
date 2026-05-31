@@ -934,7 +934,7 @@ private fun parseLine(line: String, builder: AnnotatedString.Builder) {
             3 -> 15.sp
             else -> 14.sp
         }
-        withStyle(SpanStyle(fontWeight = weight, fontSize = size, color = CodexOnSurface)) {
+        builder.withStyle(SpanStyle(fontWeight = weight, fontSize = size, color = CodexOnSurface)) {
             parseInlineContent(content, builder)
         }
         return
@@ -954,52 +954,52 @@ private fun parseInlineContent(text: String, builder: AnnotatedString.Builder) {
             text.startsWith("***", i) -> {
                 val end = text.indexOf("***", i + 3)
                 if (end > i) {
-                    withStyle(SpanStyle(fontWeight = FontWeight.Bold, fontStyle = FontStyle.Italic)) {
-                        append(text.substring(i + 3, end))
+                    builder.withStyle(SpanStyle(fontWeight = FontWeight.Bold, fontStyle = FontStyle.Italic)) {
+                        builder.append(text.substring(i + 3, end))
                     }
                     i = end + 3
                 } else {
-                    append(text[i]); i++
+                    builder.append(text[i]); i++
                 }
             }
             // 粗体 **text**
             text.startsWith("**", i) -> {
                 val end = text.indexOf("**", i + 2)
                 if (end > i) {
-                    withStyle(SpanStyle(fontWeight = FontWeight.Bold)) {
-                        append(text.substring(i + 2, end))
+                    builder.withStyle(SpanStyle(fontWeight = FontWeight.Bold)) {
+                        builder.append(text.substring(i + 2, end))
                     }
                     i = end + 2
                 } else {
-                    append(text[i]); i++
+                    builder.append(text[i]); i++
                 }
             }
             // 斜体 *text*
             text.startsWith("*", i) && !text.startsWith("**", i) -> {
                 val end = text.indexOf("*", i + 1)
                 if (end > i) {
-                    withStyle(SpanStyle(fontStyle = FontStyle.Italic)) {
-                        append(text.substring(i + 1, end))
+                    builder.withStyle(SpanStyle(fontStyle = FontStyle.Italic)) {
+                        builder.append(text.substring(i + 1, end))
                     }
                     i = end + 1
                 } else {
-                    append(text[i]); i++
+                    builder.append(text[i]); i++
                 }
             }
             // 行内代码 `code`
             text.startsWith("`", i) -> {
                 val end = text.indexOf("`", i + 1)
                 if (end > i) {
-                    withStyle(SpanStyle(
+                    builder.withStyle(SpanStyle(
                         fontFamily = FontFamily.Monospace,
                         background = CodexSurfaceVariant.copy(alpha = 0.4f),
                         color = CodexPrimaryLight
                     )) {
-                        append(" ${text.substring(i + 1, end)} ")
+                        builder.append(" ${text.substring(i + 1, end)} ")
                     }
                     i = end + 1
                 } else {
-                    append(text[i]); i++
+                    builder.append(text[i]); i++
                 }
             }
             // 链接 [text](url)
@@ -1010,22 +1010,22 @@ private fun parseInlineContent(text: String, builder: AnnotatedString.Builder) {
                     if (urlEnd > textEnd) {
                         val linkText = text.substring(i + 1, textEnd)
                         val url = text.substring(textEnd + 2, urlEnd)
-                        withStyle(SpanStyle(
+                        builder.withStyle(SpanStyle(
                             color = CodexBrandOrange,
                             textDecoration = TextDecoration.Underline
                         )) {
-                            append(linkText)
+                            builder.append(linkText)
                         }
                         i = urlEnd + 1
                     } else {
-                        append(text[i]); i++
+                        builder.append(text[i]); i++
                     }
                 } else {
-                    append(text[i]); i++
+                    builder.append(text[i]); i++
                 }
             }
             else -> {
-                append(text[i]); i++
+                builder.append(text[i]); i++
             }
         }
     }
