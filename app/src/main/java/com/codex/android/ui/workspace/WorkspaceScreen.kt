@@ -36,6 +36,9 @@ import com.codex.android.service.CodexRuntimeService
 import com.codex.android.service.RuntimeState
 import com.codex.android.ui.components.AgentStatusBar
 import com.codex.android.ui.theme.*
+import com.codex.android.ui.workspace.NativeChatView
+import com.codex.android.agent.NativeAgentService
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 
@@ -89,33 +92,41 @@ fun WorkspaceScreen(
             onOpenAbout = onOpenAbout
         )
 
-        // Main content area with WebView
+        // Main content area
         Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .weight(1f)
         ) {
-            // Show startup/error placeholder when WebView not active
-            if (!isRunning && !isWsConnected) {
-                StartPlaceholder(
-                    runtimeState = runtimeState,
-                    onToggleRuntime = onToggleRuntime
+            if (runtimeState == RuntimeState.NATIVE_MODE) {
+                // Native API mode: use Compose chat interface instead of WebView
+                val nativeAgent = remember { NativeAgentService.getInstance(LocalContext.current) }
+                NativeChatView(
+                    agent = nativeAgent,
+                    modifier = Modifier.fillMaxSize()
+                )
+            } else {
+                // Binary mode: use WebView
+                if (!isRunning && !isWsConnected) {
+                    StartPlaceholder(
+                        runtimeState = runtimeState,
+                        onToggleRuntime = onToggleRuntime
+                    )
+                }
+
+                WebViewContainer(
+                    codexBridge = codexBridge,
+                    wsPort = wsPort,
+                    isRunning = isRunning,
+                    onWebViewReady = onWebViewReady,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .then(
+                            if (isRunning || isWsConnected) Modifier
+                            else Modifier.alpha(0f)
+                        )
                 )
             }
-
-            // WebView (always created, visibility controlled by alpha)
-            WebViewContainer(
-                codexBridge = codexBridge,
-                wsPort = wsPort,
-                isRunning = isRunning,
-                onWebViewReady = onWebViewReady,
-                modifier = Modifier
-                    .fillMaxSize()
-                    .then(
-                        if (isRunning || isWsConnected) Modifier
-                        else Modifier.alpha(0f)
-                    )
-            )
         }
 
         // Bottom status bar (Phase 5: file path, elapsed, agent phase)
