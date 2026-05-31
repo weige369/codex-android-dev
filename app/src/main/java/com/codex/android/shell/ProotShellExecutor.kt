@@ -243,7 +243,7 @@ class ProotShellExecutor(
                 val reader = BufferedReader(InputStreamReader(process.inputStream))
                 var line: String?
                 while (reader.readLine().also { line = it } != null) {
-                    _stdout.tryEmit(line)
+                    _stdout.tryEmit(line!!)
                 }
                 reader.close()
             } catch (e: Exception) {
@@ -256,7 +256,7 @@ class ProotShellExecutor(
                 val reader = BufferedReader(InputStreamReader(process.errorStream))
                 var line: String?
                 while (reader.readLine().also { line = it } != null) {
-                    _stderr.tryEmit(line)
+                    _stderr.tryEmit(line!!)
                 }
                 reader.close()
             } catch (e: Exception) {
