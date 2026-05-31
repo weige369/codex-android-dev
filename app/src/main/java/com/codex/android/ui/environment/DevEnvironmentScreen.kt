@@ -154,39 +154,34 @@ fun DevEnvironmentScreen(
                                 val linuxEnv = LinuxEnvironment(context)
                                 val linuxInfo = linuxEnv.getInfo()
                                 if (linuxInfo.state != LinuxEnvironment.EngineState.READY) {
-                                    installLog = "❌ 请先安装 Linux 环境（proot + Ubuntu）"
+                                    installLog = "请先安装 Linux 环境"
                                     isInstalling = false
                                     currentAction = null
                                     return@launch
                                 }
 
-                                installLog = "正在通过 proot 安装开发工具...
-"
+                                installLog = "正在安装开发工具...\n"
                                 val tools = listOf(
                                     "apt-get update" to "更新软件源",
                                     "apt-get install -y nodejs" to "安装 Node.js",
                                     "apt-get install -y python3 python3-pip" to "安装 Python3",
-                                    "apt-get install -y git" to "安装 Git",
+                                    "apt-get install -y git" to "安装 Git"
                                 )
 
                                 for ((cmd, name) in tools) {
-                                    installLog = installLog + "
-▸ $name..."
+                                    installLog = installLog + "\n> $name..."
                                     val result = linuxEnv.runCommand(cmd, 120_000)
                                     if (result.exitCode == 0) {
-                                        installLog = installLog + " ✅"
+                                        installLog = installLog + " OK"
                                     } else {
-                                        installLog = installLog + " ❌ (exit=${result.exitCode})"
+                                        installLog = installLog + " FAIL (exit=${result.exitCode})"
                                         if (result.stderr.isNotBlank()) {
-                                            installLog = installLog + "
-  ${result.stderr.take(200)}"
+                                            installLog = installLog + "\n  ${result.stderr.take(200)}"
                                         }
                                     }
                                 }
 
-                                installLog = installLog + "
-
-安装完成!"
+                                installLog = installLog + "\n\nDone!"
                                 envInfo = devEnv.getEnvironmentInfo()
                                 isInstalling = false
                                 currentAction = null
