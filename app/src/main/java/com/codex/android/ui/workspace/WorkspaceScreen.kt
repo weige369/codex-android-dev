@@ -23,9 +23,12 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.codex.android.bridge.CodexBridge
 import com.codex.android.codex.CodexManager
+import com.codex.android.service.CodexRuntimeService
 import com.codex.android.service.RuntimeState
 import com.codex.android.ui.components.AgentStatusBar
 import com.codex.android.ui.theme.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 
 /**
  * Codex workspace main screen.
@@ -179,7 +182,39 @@ private fun StartPlaceholder(
                 CircularProgressIndicator(color = CodexPrimary, modifier = Modifier.size(48.dp))
                 Spacer(Modifier.height(16.dp))
                 Text("正在启动 Codex...", color = MaterialTheme.colorScheme.onSurfaceVariant)
-            } else if (runtimeState == RuntimeState.ERROR) {
+            }
+
+            // 显示运行时日志（下载/启动过程中）
+            if (runtimeState == RuntimeState.DOWNLOADING || 
+                runtimeState == RuntimeState.EXTRACTING || 
+                runtimeState == RuntimeState.STARTING ||
+                runtimeState == RuntimeState.ERROR) {
+                val logs by CodexRuntimeService.logs.collectAsState()
+                if (logs.isNotEmpty()) {
+                    Spacer(Modifier.height(16.dp))
+                    Surface(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(150.dp),
+                        shape = RoundedCornerShape(8.dp),
+                        color = Color(0xFF0A0A0F)
+                    ) {
+                        LazyColumn(modifier = Modifier.padding(8.dp)) {
+                            items(logs.takeLast(30)) { logLine ->
+                                Text(
+                                    logLine,
+                                    fontSize = 10.sp,
+                                    fontFamily = FontFamily.Monospace,
+                                    color = Color(0xFF4AF626),
+                                    lineHeight = 14.sp
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+            
+            if (runtimeState == RuntimeState.ERROR) {
                 Icon(
                     Icons.Filled.ErrorOutline,
                     contentDescription = null,
