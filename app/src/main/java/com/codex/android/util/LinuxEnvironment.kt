@@ -34,12 +34,15 @@ class LinuxEnvironment(private val context: Context) {
 
         private val ROOTFS_MIRRORS = listOf(
             "https://mirrors.tuna.tsinghua.edu.cn/ubuntu-cdimage/ubuntu-base/releases/24.04/release/ubuntu-base-24.04.4-base-arm64.tar.gz",
+            "https://mirrors.tuna.tsinghua.edu.cn/ubuntu-cdimage/ubuntu-base/releases/24.04/release/ubuntu-base-24.04.4-base-arm64.tar.gz",
             "https://mirrors.ustc.edu.cn/ubuntu-cdimage/ubuntu-base/releases/24.04/release/ubuntu-base-24.04.4-base-arm64.tar.gz",
             "https://mirrors.aliyun.com/ubuntu-cdimage/ubuntu-base/releases/24.04/release/ubuntu-base-24.04.4-base-arm64.tar.gz",
+            "https://mirrors.huaweicloud.com/ubuntu-cdimage/ubuntu-base/releases/24.04/release/ubuntu-base-24.04.4-base-arm64.tar.gz",
+            "https://mirrors.tencent.com/ubuntu-cdimage/ubuntu-base/releases/24.04/release/ubuntu-base-24.04.4-base-arm64.tar.gz",
             "https://cdimage.ubuntu.com/ubuntu-base/releases/24.04/release/ubuntu-base-24.04.4-base-arm64.tar.gz"
         )
 
-        private const val CONNECT_TIMEOUT_MS = 15_000
+        private const val CONNECT_TIMEOUT_MS = 20_000
     }
 
     enum class EngineState {
@@ -207,13 +210,14 @@ class LinuxEnvironment(private val context: Context) {
                 try {
                     val conn = URL(mirror).openConnection() as HttpURLConnection
                     conn.connectTimeout = CONNECT_TIMEOUT_MS
-                    conn.readTimeout = 120_000
+                    conn.readTimeout = 180_000
                     conn.instanceFollowRedirects = true
                     conn.connect()
 
                     if (conn.responseCode != HttpURLConnection.HTTP_OK) continue
 
                     val total = conn.contentLengthLong
+                    onStatus?.invoke("开始下载 (${total / 1024 / 1024}MB)...")
                     val input = conn.inputStream
                     val output = FileOutputStream(archive)
                     val buffer = ByteArray(8192)

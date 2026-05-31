@@ -92,7 +92,11 @@ fun DevEnvironmentScreen(
             // ===== 自包含 Linux 安装引导 =====
             if (envInfo?.state == DevelopmentEnvironment.EnvState.SELF_CONTAINED || envInfo?.state == DevelopmentEnvironment.EnvState.ERROR) {
                 item {
-                    SelfContainedLinuxCard(
+                    InstallLinuxCard(
+                        isInstalling = isInstalling,
+                        installLog = installLog,
+                        installProgress = installProgress,
+                        currentAction = currentAction,
                         onInstall = {
                             isInstalling = true
                             installLog = ""
@@ -116,10 +120,7 @@ fun DevEnvironmentScreen(
                                 isInstalling = false
                                 currentAction = null
                             }
-                        },
-                        isInstalling = isInstalling,
-                        installLog = installLog,
-                        installProgress = installProgress
+                        }
                     )
                 }
             }
@@ -137,11 +138,15 @@ fun DevEnvironmentScreen(
             }
             item {
                 SectionTitle("开发工具")
-                        title = "安装开发工具",
-                        subtitle = "Node.js / Python / Git / Cmake / Rust",
-                        buttonText = "安装",
-                        enabled = !isInstalling,
-                        onAction = {
+            }
+            item {
+                ActionCard(
+                    icon = Icons.Default.Build,
+                    title = "安装开发工具",
+                    subtitle = "Node.js / Python / Git / Cmake / Rust",
+                    buttonText = "安装",
+                    enabled = !isInstalling,
+                    onAction = {
                             isInstalling = true
                             installLog = ""
                             currentAction = "tools"
@@ -174,7 +179,6 @@ fun DevEnvironmentScreen(
                         Text("刷新环境检测")
                     }
                 }
-            }
 
             // ===== 安装日志 =====
             if (installLog.isNotBlank()) {
@@ -286,10 +290,6 @@ private fun EnvironmentStatusCard(
                 // 状态图标和文字
                 Row(verticalAlignment = Alignment.Top) {
                     val (icon, color, text) = when (envInfo.state) {
-                        DevelopmentEnvironment.EnvState.UBUNTU_READY ->
-                            Triple(Icons.Default.CheckCircle, Color(0xFF2ED573), "Ubuntu 已安装（可运行 Codex）")
-                        DevelopmentEnvironment.EnvState.TERMUX_READY ->
-                            Triple(Icons.Default.CheckCircle, Color(0xFF2ED573), "环境已就绪（可运行 Codex）")
                         DevelopmentEnvironment.EnvState.SELF_CONTAINED_LINUX ->
                             Triple(Icons.Default.CheckCircle, Color(0xFF2ED573), "自包含 Linux 已就绪（可运行 Codex）")
                         DevelopmentEnvironment.EnvState.SELF_CONTAINED ->
@@ -302,8 +302,6 @@ private fun EnvironmentStatusCard(
                             "未检测到 Linux 环境。请安装内置 Linux 环境（proot + Ubuntu）。"
                         DevelopmentEnvironment.EnvState.SELF_CONTAINED_LINUX ->
                             "自包含 Linux 环境已就绪，可通过 proot 运行 Codex。"
-                        DevelopmentEnvironment.EnvState.TERMUX_READY ->
-                            "建议继续安装 Ubuntu 以获得完整开发环境。"
                         else -> ""
                     }
                     Icon(icon, null, tint = color, modifier = Modifier.size(24.dp))
@@ -474,4 +472,99 @@ private fun SectionTitle(title: String) {
         color = MaterialTheme.colorScheme.primary,
         modifier = Modifier.padding(start = 4.dp, top = 4.dp)
     )
+}
+
+// ===== 自包含 Linux 安装卡片 =====
+@Composable
+fun InstallLinuxCard(
+    isInstalling: Boolean,
+    installLog: String,
+    installProgress: String,
+    currentAction: String?,
+    onInstall: () -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+        )
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    Icons.Default.Terminal,
+                    null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(28.dp)
+                )
+                Spacer(Modifier.width(12.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("自包含 Linux 环境", fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
+                    Text(
+                        "安装 proot + Ubuntu 24.04 LTS (arm64)",
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+
+            if (currentAction != null) {
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    currentAction,
+                    fontSize = 13.sp,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
+
+            if (installProgress.isNotBlank()) {
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    installProgress,
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+
+            if (installLog.isNotBlank()) {
+                Spacer(Modifier.height(8.dp))
+                Surface(
+                    modifier = Modifier.fillMaxWidth().height(120.dp),
+                    shape = RoundedCornerShape(8.dp),
+                    color = Color(0xFF0A0A0F)
+                ) {
+                    Text(
+                        installLog.trimStart(),
+                        modifier = Modifier.padding(8.dp),
+                        fontSize = 11.sp,
+                        fontFamily = FontFamily.Monospace,
+                        color = Color(0xFF4AF626),
+                        lineHeight = 16.sp
+                    )
+                }
+            }
+
+            Spacer(Modifier.height(12.dp))
+            Button(
+                onClick = onInstall,
+                enabled = !isInstalling,
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(8.dp)
+            ) {
+                if (isInstalling) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(18.dp),
+                        strokeWidth = 2.dp,
+                        color = MaterialTheme.colorScheme.onPrimary
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text("安装中...")
+                } else {
+                    Icon(Icons.Default.Download, null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text("安装 Linux 环境")
+                }
+            }
+        }
+    }
 }

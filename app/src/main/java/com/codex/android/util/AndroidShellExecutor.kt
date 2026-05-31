@@ -14,9 +14,6 @@ import java.util.concurrent.atomic.AtomicInteger
  * Android Shell 执行器。
  *
  * 支持多种执行环境：
- * - NORMAL: 普通应用权限（sh -c）
- * - TERMUX: 保留兼容（已弃用）
- * - UBUNTU: Ubuntu proot 环境
  * - SHIZUKU: Shizuku 高级权限
  * - ROOT: Root 权限
  */
@@ -109,31 +106,10 @@ object AndroidShellExecutor {
         env: Map<String, String>
     ): Process {
         return when (permissionLevel) {
-            PermissionLevel.TERMUX -> {
-                val envObj = devEnv
-                if (envObj != null && envObj.detectTermux()) {
-                    envObj.runInTermux(command, env)
-                } else {
-                    ProcessBuilder("sh", "-c", command)
-                        .apply { environment().putAll(env) }
-                        .start()
-                }
-            }
             PermissionLevel.UBUNTU_PROOT -> {
                 val envObj = devEnv
                 if (envObj != null) {
                     envObj.createProotProcess(command, env)
-                } else {
-                    ProcessBuilder("sh", "-c", command)
-                        .apply { environment().putAll(env) }
-                        .start()
-                }
-            }
-            PermissionLevel.UBUNTU -> {
-                val envObj = devEnv
-                if (envObj != null && envObj.detectTermux()) {
-                    val ubuntuCmd = "proot-distro login ubuntu -- bash -c '${command.replace("'", "'\\''")}'"
-                    envObj.runInTermux(ubuntuCmd, env)
                 } else {
                     ProcessBuilder("sh", "-c", command)
                         .apply { environment().putAll(env) }
@@ -184,5 +160,4 @@ object AndroidShellExecutor {
         } catch (_: Exception) { false }
     }
 
-    fun isUbuntuAvailable(): Boolean = devEnv?.isUbuntuInstalled() ?: false
 }

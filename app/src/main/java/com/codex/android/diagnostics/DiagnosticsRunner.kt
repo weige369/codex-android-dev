@@ -547,32 +547,6 @@ class DiagnosticsRunner(private val context: Context) {
                 "请在开发环境页面点击【安装 Linux 环境】一键安装" else ""
         ))
 
-        // Termux 检测
-
-            results.add(TestResult(
-                "Node.js", envInfo.hasNodeJs,
-                if (envInfo.hasNodeJs) envInfo.nodeVersion else "未安装 (可选)",
-                severity = Severity.INFO,
-                suggestion = if (!envInfo.hasNodeJs) "安装 Termux 后可安装 Node.js" else ""
-            ))
-            results.add(TestResult(
-                "Python", envInfo.hasPython,
-                if (envInfo.hasPython) envInfo.pythonVersion else "未安装 (可选)",
-                severity = Severity.INFO,
-                suggestion = if (!envInfo.hasPython) "安装 Termux 后可安装 Python" else ""
-            ))
-            results.add(TestResult(
-                "Git", envInfo.hasGit,
-                if (envInfo.hasGit) envInfo.gitVersion else "未安装 (可选)",
-                severity = Severity.INFO
-            ))
-            results.add(TestResult(
-                "Ubuntu (proot-distro)", envInfo.hasUbuntu,
-                if (envInfo.hasUbuntu) envInfo.ubuntuVersion else "未安装",
-                severity = if (envInfo.hasUbuntu) Severity.INFO else Severity.INFO
-            ))
-        }
-
         return results
     }
 
@@ -592,17 +566,6 @@ class DiagnosticsRunner(private val context: Context) {
             results.add(TestResult("Shell 执行 (NORMAL)", false, "异常: ${e.message}", Severity.ERROR))
         }
 
-        // Termux shell 执行
-        val devEnv = DevelopmentEnvironment(context)
-            try {
-                val result = AndroidShellExecutor.execute("echo 'termux ok'", permissionLevel = AndroidShellExecutor.PermissionLevel.TERMUX)
-                results.add(TestResult(
-                    "exit=${result.exitCode}",
-                    severity = if (result.exitCode == 0) Severity.INFO else Severity.ERROR
-                ))
-            } catch (e: Exception) {
-            }
-        }
 
         // Root 可用性
         val hasRoot = AndroidShellExecutor.isRootAvailable()
