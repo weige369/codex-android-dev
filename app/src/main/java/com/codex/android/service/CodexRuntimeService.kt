@@ -10,6 +10,7 @@ import androidx.core.app.NotificationCompat
 import com.codex.android.codex.CodexManager
 import com.codex.android.util.AndroidShellExecutor
 import com.codex.android.util.DevelopmentEnvironment
+import java.io.File
 import com.codex.android.util.LinuxEnvironment
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -31,9 +32,8 @@ enum class RuntimeState {
  * 前台服务，管理 Codex CLI 运行时生命周期。
  *
  * 运行策略：
- * 1. Termux + Ubuntu 已安装 → 在 Ubuntu proot 中运行
- * 2. Termux 已安装但无 Ubuntu → 在 Termux 中运行
- * 3. Termux 未安装 → 尝试直接运行（大概率失败，提示安装）
+ * 1. 自包含 Linux (proot) → 在 proot Ubuntu 中运行
+ * 2. 自包含模式 → 尝试直接运行（功能受限）
  */
 class CodexRuntimeService : Service() {
 
@@ -126,38 +126,18 @@ class CodexRuntimeService : Service() {
 
         try {
             // 检测运行环境
-            val useTermux = devEnv.detectTermux()
-            val envInfo = if (useTermux) devEnv.getEnvironmentInfo() else DevelopmentEnvironment.EnvInfo()
-
-            // 优先使用自包含 Linux 环境（免 Termux proot + Ubuntu）
             val linuxEnv = LinuxEnvironment(this)
             val linuxInfo = linuxEnv.getInfo()
             val hasSelfContainedLinux = linuxInfo.state == LinuxEnvironment.EngineState.READY
 
-            // 也检查 Termux Ubuntu 的可用性
-            val hasUbuntu = if (useTermux) envInfo.hasUbuntu else false
-
-            _runningMode = when {
-                hasSelfContainedLinux -> "proot-linux"
-                hasUbuntu -> "ubuntu"
-                useTermux -> "termux"
-                else -> "direct"
-            }
-            addLog("运行环境: $_runningMode (${
-                when(_runningMode) {
-                    "proot-linux" -> "自包含 proot Linux"
-                    "ubuntu" -> "Termux Ubuntu proot"
-                    "termux" -> "Termux"
-                    else -> "Android 原生 (自包含)"
-                }
-            })")
-
-            if (!useTermux && !hasSelfContainedLinux) {
-                addLog("使用自包含模式运行（无需 Termux，但无法运行 Codex）")
-            }
-            if (hasSelfContainedLinux) {
+            _runningMode = if (hasSelfContainedLinux) {
                 addLog("自包含 Linux 环境已就绪，将通过 proot 运行 Codex")
+                "proot-linux"
+            } else {
+                addLog("自包含模式（未安装 Linux 环境，无法运行 Codex）")
+                "direct"
             }
+            addLog("运行环境: $_runningMode")
 
             // 下载/验证二进制
             _state.value = RuntimeState.STARTING
@@ -227,13 +207,7 @@ class CodexRuntimeService : Service() {
             updateNotification("正在启动 Codex...")
 
             when (_runningMode) {
-                "ubuntu" -> startInUbuntu(envInfo)
-                "termux" -> if (!devEnv.detectTermux()) {
-                    addLog("Termux 不可用，切换至自包含模式")
-                    startDirect()
-                } else {
-                    startInTermux()
-                }
+                "proot-linux" -> { } // already handled above
                 else -> startDirect()
             }
 
@@ -249,7 +223,7 @@ class CodexRuntimeService : Service() {
                 val exitCode = codexProcess?.exitValue() ?: -1
                 _state.value = RuntimeState.ERROR
                 addLog("Codex 进程异常退出 (exit=$exitCode)")
-                addLog("提示: 请确保已安装 Termux 和必要的依赖")
+                addLog("请先在环境页面安装 Linux 环境")
                 updateNotification("Codex 启动失败")
                 isRunning = false
             }
@@ -265,42 +239,16 @@ class CodexRuntimeService : Service() {
     /**
      * 在 Ubuntu proot 中启动 Codex
      */
-    private suspend fun startInUbuntu(envInfo: DevelopmentEnvironment.EnvInfo) {
-        val startCmd = buildString {
-            append("proot-distro login ubuntu -- bash -c '")
-            append("export HOME=/root && ")
-            append("export CODEX_CONFIG_DIR='/data/data/com.termux/files/home/.codex' && ")
-            append("cd /root && ")
-            append("codex exec-server ")
-            append("--port $_wsPort ")
-            append("--http-port ${_wsPort + 1} ")
-            append("--skip-git-repo-check ")
-            append("2>&1'")
-        }
-        startCodexProcess(startCmd, "Ubuntu")
-    }
 
     /**
      * 在 Termux 中启动 Codex
      */
-    private suspend fun startInTermux() {
-        val startCmd = buildString {
-            append("cd ~ && ")
-            append("export CODEX_CONFIG_DIR='${codexManager.getConfigDir().absolutePath}' && ")
-            append("codex exec-server ")
-            append("--port $_wsPort ")
-            append("--http-port ${_wsPort + 1} ")
-            append("--skip-git-repo-check ")
-            append("2>&1")
-        }
-        startCodexProcess(startCmd, "Termux")
-    }
 
     /**
      * 直接启动（Android 原生，失败率高）
      */
     private suspend fun startDirect() {
-        addLog("尝试直接运行 Codex（无 Termux）...")
+        addLog("尝试直接运行 Codex...")
         // 先做可行性自检：能否直接执行该二进制
         val probe = codexManager.testDirectExecution()
         if (!probe.success) {
@@ -309,7 +257,7 @@ class CodexRuntimeService : Service() {
             if (probe.sdkInt >= 29) {
                 addLog("Android ${probe.sdkInt} 禁止执行应用私有目录中的可执行文件（W^X）")
             }
-            addLog("请在'环境'页面安装 Termux + Ubuntu 后重试")
+            addLog("请在'环境'页面安装 内置 Linux 后重试")
             _state.value = RuntimeState.ERROR
             updateNotification("需要 Termux 环境")
             return
@@ -376,12 +324,7 @@ class CodexRuntimeService : Service() {
      */
     private suspend fun startCodexProcess(launchCmd: String, modeName: String) {
         addLog("安装 Codex 到 $modeName 环境...")
-        val installOk = devEnv.installBinaryToTermux(codexManager.codexBinary, "codex")
-        if (!installOk) {
-            addLog("安装 Codex 到 Termux 失败，尝试直接启动...")
-        }
 
-        codexProcess = devEnv.runInTermux(launchCmd)
         isRunning = true
 
         serviceScope.launch {

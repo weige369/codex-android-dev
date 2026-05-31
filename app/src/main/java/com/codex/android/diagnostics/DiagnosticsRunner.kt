@@ -481,7 +481,7 @@ class DiagnosticsRunner(private val context: Context) {
                 probe.message,
                 severity = if (probe.success) Severity.INFO else Severity.WARNING,
                 suggestion = if (!probe.success)
-                    "直接运行不可用属正常（Android ${probe.sdkInt} 限制），请使用 Termux + Ubuntu" else ""
+                    "直接运行不可用属正常（Android ${probe.sdkInt} 限制），请使用内置 Linux 环境" else ""
             ))
         }
 
@@ -548,17 +548,6 @@ class DiagnosticsRunner(private val context: Context) {
         ))
 
         // Termux 检测
-        val hasTermux = devEnv.detectTermux()
-        results.add(TestResult(
-            "Termux", hasTermux,
-            if (hasTermux) "已安装" else "未安装",
-            severity = if (hasTermux || hasSelfContainedLinux) Severity.INFO else Severity.WARNING,
-            suggestion = if (!hasTermux && !hasSelfContainedLinux)
-                "请安装自包含 Linux 或从 F-Droid 安装 Termux" else ""
-        ))
-
-        if (hasTermux) {
-            val envInfo = devEnv.getEnvironmentInfo()
 
             results.add(TestResult(
                 "Node.js", envInfo.hasNodeJs,
@@ -605,16 +594,13 @@ class DiagnosticsRunner(private val context: Context) {
 
         // Termux shell 执行
         val devEnv = DevelopmentEnvironment(context)
-        if (devEnv.detectTermux()) {
             try {
                 val result = AndroidShellExecutor.execute("echo 'termux ok'", permissionLevel = AndroidShellExecutor.PermissionLevel.TERMUX)
                 results.add(TestResult(
-                    "Termux Shell 执行", result.exitCode == 0,
                     "exit=${result.exitCode}",
                     severity = if (result.exitCode == 0) Severity.INFO else Severity.ERROR
                 ))
             } catch (e: Exception) {
-                results.add(TestResult("Termux Shell 执行", false, "异常: ${e.message}", Severity.ERROR))
             }
         }
 

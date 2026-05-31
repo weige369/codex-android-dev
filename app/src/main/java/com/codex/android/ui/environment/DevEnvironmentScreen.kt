@@ -1,8 +1,5 @@
 package com.codex.android.ui.environment
 
-import android.content.Intent
-import android.net.Uri
-import android.widget.Toast
 import androidx.compose.animation.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -35,10 +32,8 @@ import kotlinx.coroutines.launch
  * 开发环境管理界面。
  *
  * 管理：
- * - Termux 安装引导（备选方案）
- * - Ubuntu 环境（proot-distro）
- * - Node.js / Python / Git 等工具
- * - 环境状态检测与修复
+ * - 内置 Linux 环境安装（proot + Ubuntu rootfs）
+ * - 环境状态检测
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -109,7 +104,7 @@ fun DevEnvironmentScreen(
                                         installProgress = if (total > 0) "${progress * 100 / total}%" else "${progress / 1024 / 1024}MB"
                                     },
                                     onStatus = { msg ->
-                                        installLog = msg
+                                        installLog = installLog + "\n" + msg
                                     }
                                 )
                                 if (ok) {
@@ -129,55 +124,19 @@ fun DevEnvironmentScreen(
                 }
             }
 
-            // ===== Termux 安装引导（备选方案） =====
-            if (envInfo?.state == DevelopmentEnvironment.EnvState.ERROR) {
+
+
+            // ===== 工具列表 =====
+            if (envInfo?.state == DevelopmentEnvironment.EnvState.SELF_CONTAINED_LINUX) {
                 item {
-                    TermuxSetupCard(
-                        onInstallTermux = {
-                            try {
-                                val intent = Intent(Intent.ACTION_VIEW, 
-                                    Uri.parse("https://f-droid.org/packages/com.termux/"))
-                                context.startActivity(intent)
-                            } catch (_: Exception) {}
-                        }
-                    )
+                    SectionTitle("已安装环境")
+                }
+                item {
+                    ToolStatusList(envInfo!!)
                 }
             }
-
-            // ===== 快速操作 =====
-            if (envInfo?.state != DevelopmentEnvironment.EnvState.ERROR) {
-                item {
-                    SectionTitle("快速操作")
-                }
-
-                // 安装/刷新 Ubuntu
-                item {
-                    ActionCard(
-                        icon = Icons.Default.Terminal,
-                        title = if (envInfo?.hasUbuntu == true) "已安装 Ubuntu ${envInfo?.ubuntuVersion}" else "安装 Ubuntu 环境",
-                        subtitle = "通过 proot-distro 安装 Ubuntu 24.04",
-                        buttonText = if (envInfo?.hasUbuntu == true) "重新安装" else "安装",
-                        buttonColor = if (envInfo?.hasUbuntu == true) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.primary,
-                        enabled = !isInstalling,
-                        onAction = {
-                            isInstalling = true
-                            installLog = ""
-                            currentAction = "ubuntu"
-                            scope.launch {
-                                // Ubuntu needs Termux - show guide
-                                installLog = "\n请先安装 Termux 后执行:\n  pkg install proot-distro\n  proot-distro install ubuntu"
-                                envInfo = devEnv.getEnvironmentInfo()
-                                isInstalling = false
-                                currentAction = null
-                            }
-                        }
-                    )
-                }
-
-                // 安装开发工具
-                item {
-                    ActionCard(
-                        icon = Icons.Default.Build,
+            item {
+                SectionTitle("开发工具")
                         title = "安装开发工具",
                         subtitle = "Node.js / Python / Git / Cmake / Rust",
                         buttonText = "安装",
@@ -188,7 +147,7 @@ fun DevEnvironmentScreen(
                             currentAction = "tools"
                             scope.launch {
                                 // Dev tools need Termux - show guide
-                                installLog = "\n请先安装 Termux 后执行:\n  pkg install nodejs-lts python git"
+                                installLog = "\n请在内置 Linux 环境中安装开发工具:\n  apt install nodejs python3 git"
                                 envInfo = devEnv.getEnvironmentInfo()
                                 isInstalling = false
                                 currentAction = null
@@ -271,7 +230,7 @@ fun DevEnvironmentScreen(
                         )
                     ) {
                         Column(modifier = Modifier.padding(16.dp)) {
-                            ToolVersionRow("Termux", envInfo?.termuxVersion ?: "-", envInfo?.state != DevelopmentEnvironment.EnvState.ERROR)
+                            
                             ToolVersionRow("Node.js", envInfo?.nodeVersion ?: "-", envInfo?.hasNodeJs == true)
                             ToolVersionRow("Python", envInfo?.pythonVersion ?: "-", envInfo?.hasPython == true)
                             ToolVersionRow("Git", envInfo?.gitVersion ?: "-", envInfo?.hasGit == true)
@@ -289,7 +248,7 @@ fun DevEnvironmentScreen(
                     color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
                 ) {
                     Text(
-                        "开发环境基于 Termux + proot-distro\nUbuntu 提供完整的 Linux 开发体验",
+                        "开发环境基于内置 proot + Ubuntu 24.04 LTS\n无需外部 Termux 依赖",
                         modifier = Modifier.padding(16.dp),
                         fontSize = 12.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -330,7 +289,7 @@ private fun EnvironmentStatusCard(
                         DevelopmentEnvironment.EnvState.UBUNTU_READY ->
                             Triple(Icons.Default.CheckCircle, Color(0xFF2ED573), "Ubuntu 已安装（可运行 Codex）")
                         DevelopmentEnvironment.EnvState.TERMUX_READY ->
-                            Triple(Icons.Default.CheckCircle, Color(0xFF2ED573), "Termux 已安装（可运行 Codex）")
+                            Triple(Icons.Default.CheckCircle, Color(0xFF2ED573), "环境已就绪（可运行 Codex）")
                         DevelopmentEnvironment.EnvState.SELF_CONTAINED_LINUX ->
                             Triple(Icons.Default.CheckCircle, Color(0xFF2ED573), "自包含 Linux 已就绪（可运行 Codex）")
                         DevelopmentEnvironment.EnvState.SELF_CONTAINED ->
@@ -340,7 +299,7 @@ private fun EnvironmentStatusCard(
                     }
                     val description = when (envInfo.state) {
                         DevelopmentEnvironment.EnvState.SELF_CONTAINED ->
-                            "未检测到 Termux。Codex 为 Linux 二进制，Android 无法直接运行，请安装内置 Linux 环境。"
+                            "未检测到 Linux 环境。请安装内置 Linux 环境（proot + Ubuntu）。"
                         DevelopmentEnvironment.EnvState.SELF_CONTAINED_LINUX ->
                             "自包含 Linux 环境已就绪，可通过 proot 运行 Codex。"
                         DevelopmentEnvironment.EnvState.TERMUX_READY ->
@@ -370,245 +329,6 @@ private fun EnvironmentStatusCard(
     }
 }
 
-// ===== Termux 安装引导（备选方案） =====
-@Composable
-private fun TermuxSetupCard(onInstallTermux: () -> Unit) {
-    val context = LocalContext.current
-    val clipboard = LocalClipboardManager.current
-
-    fun openUrl(url: String) {
-        try {
-            context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
-        } catch (_: Exception) {
-            Toast.makeText(context, "无法打开链接", Toast.LENGTH_SHORT).show()
-        }
-    }
-
-    fun copy(text: String) {
-        clipboard.setText(AnnotatedString(text))
-        Toast.makeText(context, "已复制: $text", Toast.LENGTH_SHORT).show()
-    }
-
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.3f)
-        )
-    ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                    Icons.Default.Warning,
-                    null,
-                    tint = Color(0xFFFFA502),
-                    modifier = Modifier.size(20.dp)
-                )
-                Spacer(Modifier.width(8.dp))
-                Text("需要安装 Termux 才能运行 Codex", fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
-            }
-            Spacer(Modifier.height(6.dp))
-            Text(
-                "Codex 为 Linux 二进制，Android 无法直接运行，必须借助 Termux 提供的 Linux 环境。" +
-                "请按以下三步完成安装：",
-                fontSize = 13.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                lineHeight = 20.sp
-            )
-            Spacer(Modifier.height(16.dp))
-
-            // 步骤 1：安装 Termux
-            SetupStep(stepNumber = 1, title = "安装 Termux") {
-                Text(
-                    "推荐从 F-Droid 安装（Google Play 版本已停止维护）。",
-                    fontSize = 12.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    lineHeight = 18.sp
-                )
-                Spacer(Modifier.height(8.dp))
-                Button(
-                    onClick = onInstallTermux,
-                    modifier = Modifier.fillMaxWidth(),
-                    contentPadding = PaddingValues(vertical = 8.dp)
-                ) {
-                    Icon(Icons.Default.OpenInNew, null, modifier = Modifier.size(16.dp))
-                    Spacer(Modifier.width(6.dp))
-                    Text("打开 F-Droid Termux 页面", fontSize = 13.sp)
-                }
-                Spacer(Modifier.height(6.dp))
-                OutlinedButton(
-                    onClick = { openUrl("https://mirrors.tuna.tsinghua.edu.cn/fdroid/repo/com.termux_1020.apk") },
-                    modifier = Modifier.fillMaxWidth(),
-                    contentPadding = PaddingValues(vertical = 8.dp)
-                ) {
-                    Icon(Icons.Default.Download, null, modifier = Modifier.size(16.dp))
-                    Spacer(Modifier.width(6.dp))
-                    Text("清华大学镜像（国内更快）", fontSize = 13.sp)
-                }
-            }
-
-            Spacer(Modifier.height(12.dp))
-
-            // 步骤 2：在 Termux 中执行命令
-            SetupStep(stepNumber = 2, title = "在 Termux 中执行命令") {
-                Text(
-                    "打开 Termux，逐条粘贴并执行下列命令（点右侧按钮可复制）：",
-                    fontSize = 12.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    lineHeight = 18.sp
-                )
-                Spacer(Modifier.height(8.dp))
-                CopyableCommand("pkg upgrade -y", onCopy = ::copy)
-                Spacer(Modifier.height(6.dp))
-                CopyableCommand("pkg install proot-distro -y", onCopy = ::copy)
-                Spacer(Modifier.height(6.dp))
-                CopyableCommand("proot-distro install ubuntu", onCopy = ::copy)
-                Spacer(Modifier.height(6.dp))
-                CopyableCommand("pkg install nodejs-lts python git -y", onCopy = ::copy)
-            }
-
-            Spacer(Modifier.height(12.dp))
-
-            // 步骤 3：返回刷新
-            SetupStep(stepNumber = 3, title = "返回此页面刷新", isLast = true) {
-                Text(
-                    "命令执行完成后，回到本页面点击底部「刷新环境检测」，状态将变为「已安装」。",
-                    fontSize = 12.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    lineHeight = 18.sp
-                )
-            }
-        }
-    }
-}
-
-// ===== 安装步骤（带序号圆点和连接线） =====
-@Composable
-private fun SetupStep(
-    stepNumber: Int,
-    title: String,
-    isLast: Boolean = false,
-    content: @Composable () -> Unit
-) {
-    Row(modifier = Modifier.fillMaxWidth()) {
-        // 序号圆点 + 竖线
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Box(
-                modifier = Modifier
-                    .size(26.dp)
-                    .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.primary),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    "$stepNumber",
-                    color = MaterialTheme.colorScheme.onPrimary,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 13.sp
-                )
-            }
-            if (!isLast) {
-                Box(
-                    modifier = Modifier
-                        .width(2.dp)
-                        .height(12.dp)
-                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.4f))
-                )
-            }
-        }
-        Spacer(Modifier.width(12.dp))
-        Column(modifier = Modifier.weight(1f)) {
-            Text(title, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
-            Spacer(Modifier.height(4.dp))
-            content()
-        }
-    }
-}
-
-// ===== 自包含 Linux 安装卡片 =====
-@Composable
-private fun SelfContainedLinuxCard(
-    onInstall: () -> Unit,
-    isInstalling: Boolean,
-    installLog: String,
-    installProgress: String
-) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
-        )
-    ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                    Icons.Default.Terminal,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(28.dp)
-                )
-                Spacer(Modifier.width(10.dp))
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        "内置 Linux 环境（免 Termux）",
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 15.sp
-                    )
-                    Text(
-                        "一键安装 Ubuntu 24.04 LTS，无需额外 App",
-                        fontSize = 12.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-            Spacer(Modifier.height(12.dp))
-            Text(
-                "本功能使用 proot 引擎在 App 内创建独立的 Linux 环境，自动下载并安装 Ubuntu 根文件系统（约 37MB）。",
-                fontSize = 12.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Spacer(Modifier.height(12.dp))
-            Button(
-                onClick = onInstall,
-                enabled = !isInstalling,
-                modifier = Modifier.fillMaxWidth(),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = MaterialTheme.colorScheme.primary
-                )
-            ) {
-                if (isInstalling) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(16.dp),
-                        strokeWidth = 2.dp,
-                        color = MaterialTheme.colorScheme.onPrimary
-                    )
-                    Spacer(Modifier.width(8.dp))
-                    Text("安装中 $installProgress")
-                } else {
-                    Icon(Icons.Default.Download, null, modifier = Modifier.size(18.dp))
-                    Spacer(Modifier.width(8.dp))
-                    Text("一键安装 Linux 环境")
-                }
-            }
-            if (installLog.isNotBlank()) {
-                Spacer(Modifier.height(8.dp))
-                Surface(
-                    shape = RoundedCornerShape(8.dp),
-                    color = Color(0xFF0A0A0F)
-                ) {
-                    Text(
-                        installLog.lines().dropWhile { it.isEmpty() }.joinToString("\n"),
-                        fontSize = 11.sp,
-                        fontFamily = FontFamily.Monospace,
-                        color = Color(0xFF4AF626),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(10.dp)
-                    )
-                }
-            }
-        }
-    }
-}
 
 // ===== 可复制命令行 =====
 
@@ -698,7 +418,7 @@ private fun ToolStatusList(info: DevelopmentEnvironment.EnvInfo) {
         )
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
-            ToolStatusRow("Termux", info.state != DevelopmentEnvironment.EnvState.ERROR)
+            ToolStatusRow("Codex", info.state != DevelopmentEnvironment.EnvState.ERROR)
             ToolStatusRow("Ubuntu", info.hasUbuntu)
             ToolStatusRow("Node.js", info.hasNodeJs)
             ToolStatusRow("Python", info.hasPython)

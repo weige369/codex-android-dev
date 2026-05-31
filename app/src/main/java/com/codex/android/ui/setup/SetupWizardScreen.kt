@@ -149,7 +149,7 @@ fun SetupWizardScreen(
                                             installProgress = if (total > 0) "${progress * 100 / total}%" else "${progress / 1024 / 1024}MB"
                                         },
                                         onStatus = { msg ->
-                                            installLog = msg
+                                            installLog = installLog + "\n" + msg
                                         }
                                     )
                                     installSuccess = ok

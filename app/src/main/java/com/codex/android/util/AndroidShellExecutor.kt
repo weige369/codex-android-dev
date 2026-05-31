@@ -15,7 +15,7 @@ import java.util.concurrent.atomic.AtomicInteger
  *
  * 支持多种执行环境：
  * - NORMAL: 普通应用权限（sh -c）
- * - TERMUX: Termux 环境（Linux 兼容）
+ * - TERMUX: 保留兼容（已弃用）
  * - UBUNTU: Ubuntu proot 环境
  * - SHIZUKU: Shizuku 高级权限
  * - ROOT: Root 权限
@@ -27,8 +27,7 @@ object AndroidShellExecutor {
 
     enum class PermissionLevel {
         NORMAL,
-        TERMUX,
-        UBUNTU,
+
         UBUNTU_PROOT,
         SHIZUKU,
         ROOT
@@ -185,6 +184,5 @@ object AndroidShellExecutor {
         } catch (_: Exception) { false }
     }
 
-    fun isTermuxAvailable(): Boolean = devEnv?.detectTermux() ?: false
     fun isUbuntuAvailable(): Boolean = devEnv?.isUbuntuInstalled() ?: false
 }
