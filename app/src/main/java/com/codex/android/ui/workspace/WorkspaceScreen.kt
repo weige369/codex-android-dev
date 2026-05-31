@@ -5,6 +5,7 @@ import androidx.compose.animation.*
 import androidx.compose.animation.core.EaseInOutSine
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -139,7 +140,7 @@ private fun StartPlaceholder(
     onToggleRuntime: () -> Unit
 ) {
     val infiniteTransition = rememberInfiniteTransition(label = "brandPulse")
-    val pulseAlpha by infiniteTransition.animateFloat(
+    val pulseAlpha by infiniteTransition.animateFloat<Float>(
         initialValue = 0.6f,
         targetValue = 1.0f,
         animationSpec = infiniteRepeatable(
@@ -148,7 +149,7 @@ private fun StartPlaceholder(
         ),
         label = "brandPulseAlpha"
     )
-    val glowScale by infiniteTransition.animateFloat(
+    val glowScale by infiniteTransition.animateFloat<Float>(
         initialValue = 0.92f,
         targetValue = 1.08f,
         animationSpec = infiniteRepeatable(
