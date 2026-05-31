@@ -40,7 +40,7 @@ fun NativeChatView(
     var currentStreamContent by remember { mutableStateOf("") }
 
     LaunchedEffect(agent.connectionState) {
-        isStreaming = agent.connectionState.value == NativeAgentService.ConnectionState.STREAMING
+        isStreaming = agent.connectionState.value.name == "STREAMING"
     }
 
     Column(modifier = modifier.fillMaxSize()) {
