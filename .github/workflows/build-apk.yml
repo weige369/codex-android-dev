@@ -1,9 +1,18 @@
 name: Android APK Build
 on:
   push:
-    branches: [main]
+    branches: [main, feat/ui-design-upgrade, fix/security-round2]
   pull_request:
   workflow_dispatch:
+    inputs:
+      build_type:
+        description: 'Build type: debug or release'
+        required: false
+        default: 'debug'
+        type: choice
+        options:
+          - debug
+          - release
 jobs:
   build:
     name: Android APK Build
@@ -62,6 +71,8 @@ jobs:
       - name: Download binary dependencies
         if: steps.changes.outputs.changed == 'true'
         run: |
+          gh release download deps --repo weige369/codex-android-dev \
+            --pattern "*.zip" --dir /tmp/deps 2>/dev/null || \
           gh release download deps --repo weige369/codex-android \
             --pattern "*.zip" --dir /tmp/deps
           echo "=== Extracting jniLibs -> app/src/main/jniLibs/ ==="
@@ -173,7 +184,7 @@ jobs:
         if: steps.changes.outputs.changed == 'true'
         run: |
           chmod +x gradlew
-          if [ "${{ steps.signing.outputs.signed }}" = "true" ]; then
+          if [ "${{ steps.signing.outputs.signed }}" = "true" ] || [ "${{ github.event.inputs.build_type }}" = "release" ]; then
             ./gradlew :app:assembleRelease --no-daemon --stacktrace 2>&1 | tee build.log
           else
             ./gradlew :app:assembleDebug --no-daemon --stacktrace 2>&1 | tee build.log
