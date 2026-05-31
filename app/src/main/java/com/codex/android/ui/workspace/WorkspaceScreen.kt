@@ -1,12 +1,15 @@
 package com.codex.android.ui.workspace
 
 import android.webkit.WebView
-import androidx.compose.animation.*
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.EaseInOutSine
 import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.scaleIn
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
@@ -140,7 +143,7 @@ private fun StartPlaceholder(
     onToggleRuntime: () -> Unit
 ) {
     val infiniteTransition = rememberInfiniteTransition(label = "brandPulse")
-    val pulseAlpha by infiniteTransition.animateFloat<Float>(
+    val pulseAlpha by infiniteTransition.animateFloat(
         initialValue = 0.6f,
         targetValue = 1.0f,
         animationSpec = infiniteRepeatable(
@@ -149,7 +152,7 @@ private fun StartPlaceholder(
         ),
         label = "brandPulseAlpha"
     )
-    val glowScale by infiniteTransition.animateFloat<Float>(
+    val glowScale by infiniteTransition.animateFloat(
         initialValue = 0.92f,
         targetValue = 1.08f,
         animationSpec = infiniteRepeatable(
