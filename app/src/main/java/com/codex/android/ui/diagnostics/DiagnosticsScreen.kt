@@ -23,6 +23,7 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.codex.android.diagnostics.CrashHandler
+import com.codex.android.ui.theme.*
 import com.codex.android.diagnostics.DiagnosticPrefs
 import com.codex.android.diagnostics.DiagnosticsRunner
 import com.codex.android.diagnostics.ReportUploader
@@ -89,7 +90,8 @@ fun DiagnosticsScreen(onBack: () -> Unit = {}) {
             // ===== 概览 =====
             item {
                 Card(modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f))) {
+                    shape = CardShape,
+                    colors = CardDefaults.cardColors(containerColor = CodexBrandOrange.copy(alpha = 0.1f))) {
                     Column(modifier = Modifier.padding(20.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             if (isRunning) {
@@ -98,7 +100,7 @@ fun DiagnosticsScreen(onBack: () -> Unit = {}) {
                             } else if (report != null) {
                                 val allPassed = report?.isAllPassed ?: false
                                 val icon = if (allPassed) Icons.Default.CheckCircle else Icons.Default.Warning
-                                val color = if (allPassed) Color(0xFF2ED573) else Color(0xFFFFA502)
+                                val color = if (allPassed) StatusOnline else CodexBrandOrange
                                 Icon(icon, null, tint = color, modifier = Modifier.size(28.dp))
                                 Spacer(Modifier.width(12.dp))
                                 Column(modifier = Modifier.weight(1f)) {
@@ -137,7 +139,7 @@ fun DiagnosticsScreen(onBack: () -> Unit = {}) {
             if (report != null) {
                 item {
                     Text("设备信息", fontSize = 13.sp, fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(start = 4.dp, top = 8.dp))
+                        color = CodexBrandOrange, modifier = Modifier.padding(start = 4.dp, top = 8.dp))
                 }
                 item {
                     Card(modifier = Modifier.fillMaxWidth(),
@@ -170,7 +172,7 @@ fun DiagnosticsScreen(onBack: () -> Unit = {}) {
                 // ===== 测试结果 =====
                 item {
                     Text("测试结果", fontSize = 13.sp, fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(start = 4.dp, top = 8.dp))
+                        color = CodexBrandOrange, modifier = Modifier.padding(start = 4.dp, top = 8.dp))
                 }
                 val results = report?.results ?: emptyList()
                 items(results) { result ->
@@ -218,7 +220,7 @@ fun DiagnosticsScreen(onBack: () -> Unit = {}) {
             // ===== GitHub 上报 =====
             item {
                 Text("GitHub 上报", fontSize = 13.sp, fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(start = 4.dp, top = 16.dp))
+                    color = CodexBrandOrange, modifier = Modifier.padding(start = 4.dp, top = 16.dp))
             }
 
             // Token 配置折叠
@@ -326,7 +328,7 @@ fun DiagnosticsScreen(onBack: () -> Unit = {}) {
             // ===== 崩溃日志 =====
             item {
                 Text("崩溃日志", fontSize = 13.sp, fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(start = 4.dp, top = 16.dp))
+                    color = CodexBrandOrange, modifier = Modifier.padding(start = 4.dp, top = 16.dp))
             }
 
             item {
@@ -364,7 +366,7 @@ fun DiagnosticsScreen(onBack: () -> Unit = {}) {
             // ===== 快速操作 =====
             item {
                 Text("快速操作", fontSize = 13.sp, fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(start = 4.dp, top = 16.dp))
+                    color = CodexBrandOrange, modifier = Modifier.padding(start = 4.dp, top = 16.dp))
             }
 
             item {
@@ -432,7 +434,7 @@ fun DiagnosticsScreen(onBack: () -> Unit = {}) {
             // ===== 使用说明 =====
             item {
                 Spacer(Modifier.height(16.dp))
-                Surface(shape = RoundedCornerShape(8.dp),
+                Surface(shape = CardShape,
                     color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)) {
                     Text(
                         "使用说明:\n" +

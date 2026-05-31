@@ -10,6 +10,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -110,6 +111,7 @@ fun CodexSettingsScreen(
             item {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
+                    shape = CardShape,
                     colors = CardDefaults.cardColors(
                         containerColor = MaterialTheme.colorScheme.surfaceVariant
                     )
@@ -140,6 +142,10 @@ fun CodexSettingsScreen(
                         )
                     }
                 }
+            }
+
+            item {
+                HorizontalDivider(color = CodexOutline, thickness = 0.5.dp, modifier = Modifier.padding(vertical = 4.dp))
             }
 
             // ===== API Settings (when API mode) =====
@@ -194,6 +200,10 @@ fun CodexSettingsScreen(
                 }
             }
 
+            item {
+                HorizontalDivider(color = CodexOutline, thickness = 0.5.dp, modifier = Modifier.padding(vertical = 4.dp))
+            }
+
             // ===== Security Level =====
             item {
                 SectionHeader("安全等级")
@@ -201,6 +211,7 @@ fun CodexSettingsScreen(
             item {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
+                    shape = CardShape,
                     colors = CardDefaults.cardColors(
                         containerColor = MaterialTheme.colorScheme.surfaceVariant
                     )
@@ -237,6 +248,10 @@ fun CodexSettingsScreen(
                 }
             }
 
+            item {
+                HorizontalDivider(color = CodexOutline, thickness = 0.5.dp, modifier = Modifier.padding(vertical = 4.dp))
+            }
+
             // ===== Codex Binary =====
             item {
                 SectionHeader("Codex CLI 二进制")
@@ -244,6 +259,7 @@ fun CodexSettingsScreen(
             item {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
+                    shape = CardShape,
                     colors = CardDefaults.cardColors(
                         containerColor = MaterialTheme.colorScheme.surfaceVariant
                     )
@@ -312,6 +328,7 @@ fun CodexSettingsScreen(
             item {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
+                    shape = CardShape,
                     colors = CardDefaults.cardColors(
                         containerColor = MaterialTheme.colorScheme.surfaceVariant
                     )
@@ -364,6 +381,7 @@ fun CodexSettingsScreen(
             item {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
+                    shape = CardShape,
                     colors = CardDefaults.cardColors(
                         containerColor = MaterialTheme.colorScheme.surfaceVariant
                     )
@@ -455,7 +473,7 @@ private fun SettingsNavItem(
             modifier = Modifier.padding(12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Icon(icon, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(22.dp))
+            Icon(icon, null, tint = CodexBrandOrange, modifier = Modifier.size(22.dp))
             Spacer(Modifier.width(12.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(title, fontSize = 14.sp, fontWeight = FontWeight.Medium)
@@ -488,6 +506,7 @@ private fun CodexUpdateCard(
 
     Card(
         modifier = Modifier.fillMaxWidth(),
+        shape = CardShape,
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surfaceVariant
         )
@@ -621,6 +640,7 @@ private fun ManualImportCard(
 
     Card(
         modifier = Modifier.fillMaxWidth(),
+        shape = CardShape,
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surfaceVariant
         )
