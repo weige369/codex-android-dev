@@ -1,6 +1,7 @@
 package com.codex.android.agent
 
 import org.json.JSONObject
+import org.json.JSONArray
 
 /**
  * Agent 工具接口。
