@@ -109,10 +109,18 @@ fun WorkspaceScreen(
             )
         }
 
-        // Bottom status bar
+        // Bottom status bar (Phase 5: file path, elapsed, agent phase)
         AgentStatusBar(
             state = runtimeState,
-            isConnected = isWsConnected
+            isConnected = isWsConnected,
+            currentFilePath = workspacePath,
+            elapsedSeconds = 0,
+            agentPhase = when {
+                isRunning && isWsConnected -> "executing"
+                isStarting -> "thinking"
+                hasError -> ""
+                else -> ""
+            }
         )
     }
 }
