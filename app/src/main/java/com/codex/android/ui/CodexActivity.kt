@@ -374,6 +374,9 @@ class CodexActivity : ComponentActivity() {
                                 Screen.About -> AboutScreen(
                                     onBack = { navigateTo(Screen.Settings) }
                                 )
+                                Screen.ApiProvider -> ApiProviderScreen(
+                                    onBack = { navigateTo(Screen.Settings) }
+                                )
                                 Screen.SetupWizard -> SetupWizardScreen(
                                     onComplete = {
                                         lifecycleScope.launch {
