@@ -29,6 +29,12 @@ class SearchTool(
 
         /** grep 模式下每条匹配的上下文行数。 */
         private const val GREP_CONTEXT_LINES = 2
+        /** 搜索时跳过的目录名。 */
+        private val IGNORED_DIRECTORIES = setOf(
+            "node_modules", ".git", ".svn", ".hg", "build", ".gradle",
+            ".idea", "__pycache__", ".cache", ".tox", "venv", ".venv",
+            "dist", "out", "target", ".next", ".nuxt"
+        )
     }
 
     override val name: String = "search"
@@ -384,15 +390,5 @@ class SearchTool(
         return file.readText(Charsets.UTF_8)
             .split(keyword, ignoreCase = true)
             .size - 1
-            .coerceAtLeast(0)
-    }
-
-    companion object {
-        /** 搜索时跳过的目录名。 */
-        private val IGNORED_DIRECTORIES = setOf(
-            "node_modules", ".git", ".svn", ".hg", "build", ".gradle",
-            ".idea", "__pycache__", ".cache", ".tox", "venv", ".venv",
-            "dist", "out", "target", ".next", ".nuxt"
-        )
     }
 }
