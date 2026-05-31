@@ -15,6 +15,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import com.codex.android.ui.theme.CodexBrandOrange
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -54,7 +55,7 @@ fun AboutScreen(
                 ) {
                     Surface(
                         shape = RoundedCornerShape(16.dp),
-                        color = Color(0xFF6C5CE7),
+                        color = CodexBrandOrange,
                         modifier = Modifier.size(64.dp)
                     ) {
                         Box(contentAlignment = Alignment.Center) {

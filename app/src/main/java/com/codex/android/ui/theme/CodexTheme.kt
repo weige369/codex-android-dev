@@ -12,9 +12,9 @@ import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
 
 private val CodexDarkColorScheme = darkColorScheme(
-    primary = CodexPrimary,
+    primary = CodexBrandOrange,
     onPrimary = Color.White,
-    primaryContainer = CodexPrimary.copy(alpha = 0.15f),
+    primaryContainer = CodexBrandOrange.copy(alpha = 0.15f),
     onPrimaryContainer = CodexPrimaryLight,
     secondary = CodexSecondary,
     onSecondary = Color.Black,
@@ -35,23 +35,23 @@ private val CodexDarkColorScheme = darkColorScheme(
     onErrorContainer = CodexError,
     inverseSurface = CodexOnSurface,
     inverseOnSurface = CodexSurface,
-    surfaceTint = CodexPrimary,
+    surfaceTint = CodexBrandOrange,
 )
 
 private val CodexLightColorScheme = lightColorScheme(
-    primary = CodexPrimary,
+    primary = CodexBrandOrange,
     onPrimary = Color.White,
-    primaryContainer = CodexPrimaryLight.copy(alpha = 0.3f),
+    primaryContainer = CodexBrandOrange.copy(alpha = 0.15f),
     onPrimaryContainer = CodexPrimaryDark,
     secondary = CodexSecondary,
     onSecondary = Color.White,
-    background = Color(0xFFF8F8FC),
-    onBackground = Color(0xFF1A1A2E),
+    background = CodexCanvas,
+    onBackground = CodexInk,
     surface = Color.White,
-    onSurface = Color(0xFF1A1A2E),
-    surfaceVariant = Color(0xFFF0F0F5),
-    onSurfaceVariant = Color(0xFF5A5A72),
-    outline = Color(0xFFD0D0DC),
+    onSurface = CodexInk,
+    surfaceVariant = CodexHairline,
+    onSurfaceVariant = Color(0xFF5A5650),
+    outline = CodexHairline,
     error = CodexError,
     onError = Color.White,
 )
