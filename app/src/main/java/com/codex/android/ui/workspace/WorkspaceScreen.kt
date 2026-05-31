@@ -66,7 +66,8 @@ fun WorkspaceScreen(
     onOpenFileBrowser: (() -> Unit)? = null,
     onOpenAbout: (() -> Unit)? = null,
     onToggleRuntime: () -> Unit,
-    onExportFile: ((String) -> Unit)? = null
+    onExportFile: ((String) -> Unit)? = null,
+    onOpenApiProvider: (() -> Unit)? = null
 ) {
     val isRunning = runtimeState == RuntimeState.RUNNING || runtimeState == RuntimeState.NATIVE_MODE
     val isStarting = runtimeState == RuntimeState.STARTING ||
@@ -98,9 +99,9 @@ fun WorkspaceScreen(
                 .fillMaxWidth()
                 .weight(1f)
         ) {
+            // Native API mode: use Compose chat interface instead of WebView
+            val nativeAgent = remember { NativeAgentService.getInstance(LocalContext.current) }
             if (runtimeState == RuntimeState.NATIVE_MODE) {
-                // Native API mode: use Compose chat interface instead of WebView
-                val nativeAgent = remember { NativeAgentService.getInstance(LocalContext.current) }
                 NativeChatView(
                     agent = nativeAgent,
                     modifier = Modifier.fillMaxSize()
