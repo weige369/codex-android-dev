@@ -14,3 +14,4 @@ app/release
 *.aab
 build.log
 .kotlin/
+web-chat/node_modules/

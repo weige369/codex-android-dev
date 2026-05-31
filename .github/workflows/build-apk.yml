@@ -104,12 +104,11 @@ jobs:
               -alias "$RELEASE_KEY_ALIAS" > /dev/null 2>&1
             KEYTOOL_EXIT=$?
             if [ "$KEYTOOL_EXIT" -eq 0 ]; then
-              {
-                echo "RELEASE_STORE_FILE=$KEYSTORE_PATH"
-                echo "RELEASE_STORE_PASSWORD=$RELEASE_STORE_PASSWORD"
-                echo "RELEASE_KEY_ALIAS=$RELEASE_KEY_ALIAS"
-                echo "RELEASE_KEY_PASSWORD=$RELEASE_KEY_PASSWORD"
-              } >> local.properties
+              # H-2 fix: set env vars instead of writing to local.properties
+              echo "RELEASE_STORE_FILE=$KEYSTORE_PATH" >> "$GITHUB_ENV"
+              echo "RELEASE_STORE_PASSWORD=$RELEASE_STORE_PASSWORD" >> "$GITHUB_ENV"
+              echo "RELEASE_KEY_ALIAS=$RELEASE_KEY_ALIAS" >> "$GITHUB_ENV"
+              echo "RELEASE_KEY_PASSWORD=$RELEASE_KEY_PASSWORD" >> "$GITHUB_ENV"
               echo "signed=true" >> "$GITHUB_OUTPUT"
               echo "Release signing configured and validated."
             else

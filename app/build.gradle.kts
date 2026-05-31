@@ -31,10 +31,15 @@ android {
 
 
     signingConfigs {
-        val releaseKeystorePath = localProperties.getProperty("RELEASE_STORE_FILE")
-        val releaseStorePassword = localProperties.getProperty("RELEASE_STORE_PASSWORD")
-        val releaseKeyAlias = localProperties.getProperty("RELEASE_KEY_ALIAS")
-        val releaseKeyPassword = localProperties.getProperty("RELEASE_KEY_PASSWORD")
+        // H-2 fix: prioritize env vars (CI), fallback to local.properties (local dev)
+        val releaseKeystorePath = System.getenv("RELEASE_STORE_FILE")
+            ?: localProperties.getProperty("RELEASE_STORE_FILE")
+        val releaseStorePassword = System.getenv("RELEASE_STORE_PASSWORD")
+            ?: localProperties.getProperty("RELEASE_STORE_PASSWORD")
+        val releaseKeyAlias = System.getenv("RELEASE_KEY_ALIAS")
+            ?: localProperties.getProperty("RELEASE_KEY_ALIAS")
+        val releaseKeyPassword = System.getenv("RELEASE_KEY_PASSWORD")
+            ?: localProperties.getProperty("RELEASE_KEY_PASSWORD")
 
         if (releaseKeystorePath != null &&
             releaseStorePassword != null &&
@@ -68,15 +73,15 @@ android {
         }
 
         buildConfigField("String", "GITHUB_CLIENT_ID", "\"${localProperties.getProperty("GITHUB_CLIENT_ID")}\"")
-        buildConfigField("String", "GITHUB_CLIENT_SECRET", "\"${localProperties.getProperty("GITHUB_CLIENT_SECRET")}\"")
+        // R-2 fix: client_secret removed — should never be embedded in client APK
     }
 
     buildTypes {
         val releaseSigningConfig = signingConfigs.findByName("release")
 
         release {
-            isMinifyEnabled = false
-            isShrinkResources = false
+            isMinifyEnabled = true
+            isShrinkResources = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"

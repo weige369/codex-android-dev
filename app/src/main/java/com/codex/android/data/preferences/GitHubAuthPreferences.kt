@@ -43,7 +43,7 @@ class GitHubAuthPreferences(private val context: Context) {
     companion object {
         // GitHub OAuth相关配置
         val GITHUB_CLIENT_ID = BuildConfig.GITHUB_CLIENT_ID
-        val GITHUB_CLIENT_SECRET = BuildConfig.GITHUB_CLIENT_SECRET
+        // R-2 fix: client_secret removed from APK (not used in code, was a security risk)
         const val GITHUB_SCOPE = "notifications,public_repo,user:email,read:user"
         private const val REQUIRED_AUTH_VERSION = 2
         private const val GITHUB_REDIRECT_SCHEME = "codex"

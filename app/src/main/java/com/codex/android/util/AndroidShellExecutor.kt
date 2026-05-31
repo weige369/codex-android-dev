@@ -70,29 +70,24 @@ object AndroidShellExecutor {
             activeProcesses[id] = process
             processHistory.add(ProcessInfo(id, command, System.currentTimeMillis(), permissionLevel))
 
-            val stdout = StringBuilder()
-            val stderr = StringBuilder()
-
-            val stdoutThread = Thread {
-                try { process.inputStream.bufferedReader().use { r -> r.lines().forEach { stdout.appendLine(it) } } }
-                catch (e: Exception) { Log.e(TAG, "读取标准输出失败", e) }
+            // 使用 redirectErrorStream(true) 合并 stdout/stderr，避免 pipe buffer 死锁
+            val output = StringBuilder()
+            val reader = BufferedReader(InputStreamReader(process.inputStream))
+            var line: String?
+            while (reader.readLine().also { line = it } != null) {
+                output.appendLine(line)
             }
-            val stderrThread = Thread {
-                try { process.errorStream.bufferedReader().use { r -> r.lines().forEach { stderr.appendLine(it) } } }
-                catch (e: Exception) { Log.e(TAG, "读取错误输出失败", e) }
-            }
-            stdoutThread.start(); stderrThread.start()
+            reader.close()
 
             val finished = process.waitFor(timeoutMs, TimeUnit.MILLISECONDS)
-            stdoutThread.join(1000); stderrThread.join(1000)
 
             if (!finished) {
                 killProcess(id)
                 activeProcesses.remove(id)
-                ShellResult(-1, stdout.toString(), stderr.toString(), isTimedOut = true, permissionLevel = permissionLevel)
+                ShellResult(-1, output.toString(), "", isTimedOut = true, permissionLevel = permissionLevel)
             } else {
                 activeProcesses.remove(id)
-                ShellResult(process.exitValue(), stdout.toString(), stderr.toString(), permissionLevel = permissionLevel)
+                ShellResult(process.exitValue(), output.toString(), "", permissionLevel = permissionLevel)
             }
         } catch (e: Exception) {
             Log.e(TAG, "执行命令失败: $command", e)
@@ -112,23 +107,23 @@ object AndroidShellExecutor {
                     envObj.createProotProcess(command, env)
                 } else {
                     ProcessBuilder("sh", "-c", command)
-                        .apply { environment().putAll(env) }
+                        .apply { environment().putAll(env); redirectErrorStream(true) }
                         .start()
                 }
             }
             PermissionLevel.SHIZUKU -> {
                 ProcessBuilder("sh", "-c", command)
-                    .apply { environment().putAll(env) }
+                    .apply { environment().putAll(env); redirectErrorStream(true) }
                     .start()
             }
             PermissionLevel.ROOT -> {
                 ProcessBuilder("su", "-c", command)
-                    .apply { environment().putAll(env) }
+                    .apply { environment().putAll(env); redirectErrorStream(true) }
                     .start()
             }
             PermissionLevel.NORMAL -> {
                 ProcessBuilder("sh", "-c", command)
-                    .apply { environment().putAll(env) }
+                    .apply { environment().putAll(env); redirectErrorStream(true) }
                     .start()
             }
         }

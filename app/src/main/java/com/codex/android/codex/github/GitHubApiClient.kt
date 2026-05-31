@@ -4,6 +4,7 @@ import android.content.Context
 import android.util.Log
 import com.codex.android.data.preferences.GitHubAuthPreferences
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
@@ -29,6 +30,38 @@ class GitHubApiClient(private val context: Context) {
         private const val TAG = "GitHubApiClient"
         private const val API_BASE = "https://api.github.com"
         private const val GITHUB_BASE = "https://github.com"
+    }
+
+    // 速率限制器
+    private var lastRequestTime = 0L
+    private val minRequestIntervalMs = 500L // 500ms 最小间隔
+
+    private suspend fun rateLimit() {
+        val now = System.currentTimeMillis()
+        val elapsed = now - lastRequestTime
+        if (elapsed < minRequestIntervalMs) {
+            delay(minRequestIntervalMs - elapsed)
+        }
+        lastRequestTime = System.currentTimeMillis()
+    }
+
+    // 指数退避重试
+    private suspend fun <T> retryWithBackoff(
+        maxRetries: Int = 3,
+        initialDelayMs: Long = 1000L,
+        block: suspend () -> Result<T>
+    ): Result<T> {
+        var lastResult: Result<T>? = null
+        for (attempt in 0 until maxRetries) {
+            lastResult = block()
+            if (lastResult.isSuccess) return lastResult
+            if (attempt < maxRetries - 1) {
+                val backoffMs = initialDelayMs * (1L shl attempt) // 1s -> 2s -> 4s
+                Log.w(TAG, "请求失败，${backoffMs}ms 后重试 (第${attempt + 1}次)...")
+                delay(backoffMs)
+            }
+        }
+        return lastResult!!
     }
 
     private val authPrefs = GitHubAuthPreferences.getInstance(context)
@@ -201,7 +234,8 @@ class GitHubApiClient(private val context: Context) {
     }
 
     /**
-     * 递归下载仓库内容
+     * 递归下载仓库内容。
+     * 当文件数 > 100 时改用 tarball 端点下载，避免大量 API 调用触发速率限制。
      */
     private suspend fun downloadRepoContents(
         owner: String,
@@ -211,10 +245,18 @@ class GitHubApiClient(private val context: Context) {
         onProgress: ((String) -> Unit)?
     ): Boolean {
         return try {
+            // 先检查仓库大小：获取根目录内容，估算文件数
             val contentsResult = getRepoContents(owner, repo, path)
             if (contentsResult.isFailure) return false
 
-            contentsResult.getOrThrow().forEach { file ->
+            val rootFiles = contentsResult.getOrThrow()
+            // 如果根目录文件数较多，使用 tarball 端点
+            if (rootFiles.size > 100) {
+                Log.i(TAG, "仓库文件数 > 100，使用 tarball 端点下载")
+                return downloadRepoTarball(owner, repo, localDir, onProgress)
+            }
+
+            rootFiles.forEach { file ->
                 if (file.type == "dir") {
                     val subDir = java.io.File(localDir, file.name)
                     subDir.mkdirs()
@@ -231,6 +273,68 @@ class GitHubApiClient(private val context: Context) {
             true
         } catch (e: Exception) {
             Log.e(TAG, "下载仓库内容出错", e)
+            false
+        }
+    }
+
+    /**
+     * 通过 tarball 端点下载仓库（适用于大仓库）。
+     */
+    private suspend fun downloadRepoTarball(
+        owner: String,
+        repo: String,
+        localDir: java.io.File,
+        onProgress: ((String) -> Unit)?
+    ): Boolean = withContext(Dispatchers.IO) {
+        try {
+            rateLimit()
+            val tokenResult = getToken()
+            if (tokenResult.isFailure) return@withContext false
+
+            val url = URL("$API_BASE/repos/$owner/$repo/tarball")
+            val conn = url.openConnection() as HttpURLConnection
+            conn.requestMethod = "GET"
+            conn.setRequestProperty("Authorization", "Bearer ${tokenResult.getOrThrow()}")
+            conn.setRequestProperty("Accept", "application/vnd.github.v3+json")
+            conn.connectTimeout = 15000
+            conn.readTimeout = 120000
+            conn.instanceFollowRedirects = true
+
+            if (conn.responseCode != HttpURLConnection.HTTP_OK) {
+                Log.e(TAG, "tarball 下载失败: HTTP ${conn.responseCode}")
+                return@withContext false
+            }
+
+            // 保存 tarball 到临时文件并解压
+            val tempTar = java.io.File(localDir.parentFile, "${repo}-temp.tar.gz")
+            conn.inputStream.use { input ->
+                java.io.FileOutputStream(tempTar).use { output ->
+                    val buffer = ByteArray(8192)
+                    var bytesRead: Int
+                    while (input.read(buffer).also { bytesRead = it } != -1) {
+                        output.write(buffer, 0, bytesRead)
+                    }
+                }
+            }
+
+            // 解压 tarball
+            onProgress?.invoke("解压仓库 tarball...")
+            val process = ProcessBuilder("tar", "-xzf", tempTar.absolutePath, "-C", localDir.absolutePath, "--strip-components=1")
+                .redirectErrorStream(true)
+                .start()
+            val exitCode = process.waitFor()
+            tempTar.delete()
+
+            if (exitCode == 0) {
+                onProgress?.invoke("tarball 解压完成")
+                true
+            } else {
+                val err = process.inputStream.bufferedReader().readText()
+                Log.e(TAG, "tarball 解压失败: $err")
+                false
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "tarball 下载失败", e)
             false
         }
     }
@@ -704,7 +808,9 @@ class GitHubApiClient(private val context: Context) {
     // ========== 内部方法 ==========
 
     private suspend fun <T> apiGetObject(endpoint: String, parser: (JSONObject) -> T): Result<T> {
-        return try {
+        return retryWithBackoff {
+            try {
+                rateLimit()
             val tokenResult = getToken()
             if (tokenResult.isFailure) return Result.failure(tokenResult.exceptionOrNull()!!)
 
@@ -728,12 +834,15 @@ class GitHubApiClient(private val context: Context) {
                 Result.failure(Exception("GitHub API 错误 ($code): $error"))
             }
         } catch (e: Exception) {
-            Result.failure(e)
+                Result.failure(e)
+            }
         }
     }
 
     private suspend fun <T> apiGetArray(endpoint: String, parser: (JSONArray) -> T): Result<T> {
-        return try {
+        return retryWithBackoff {
+            try {
+                rateLimit()
             val tokenResult = getToken()
             if (tokenResult.isFailure) return Result.failure(tokenResult.exceptionOrNull()!!)
 
@@ -755,7 +864,8 @@ class GitHubApiClient(private val context: Context) {
                 Result.failure(Exception("GitHub API 错误 ($code): $error"))
             }
         } catch (e: Exception) {
-            Result.failure(e)
+                Result.failure(e)
+            }
         }
     }
 

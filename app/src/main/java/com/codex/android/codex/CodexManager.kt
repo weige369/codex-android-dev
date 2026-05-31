@@ -63,6 +63,26 @@ class CodexManager(private val context: Context) {
 
         private fun archiveName(arch: ArchInfo): String = "codex-${arch.rustTarget}.tar.gz"
 
+        private val EXPECTED_SHA256 = mapOf(
+            "codex-aarch64-unknown-linux-musl.tar.gz" to "268bfe8cf8154940fea256df75cd441c54a0c71e6c8ccd45ab3f76ff28ba1413",
+            "codex-x86_64-unknown-linux-musl.tar.gz" to "d06019ab9c35d281b78dc2ebb2ae55c2bb97ea11bf7f452bafe390eddb0034ef",
+            "proot-v5.3.0-aarch64-static" to "fa10b1a7818c2f5b1dcb5834450570c368c9ecf66d31521509621b95c4538a45",
+        )
+
+        private fun verifyFileSha256(file: File, expectedHash: String): Boolean {
+            val digest = java.security.MessageDigest.getInstance("SHA-256")
+            file.inputStream().use { fis ->
+                val buffer = ByteArray(8192)
+                var read: Int
+                while (fis.read(buffer).also { read = it } != -1) {
+                    digest.update(buffer, 0, read)
+                }
+            }
+            val hash = digest.digest().joinToString("") { "%02x".format(it) }
+            return hash == expectedHash
+        }
+
+
         private fun releasePath(version: String, archive: String): String =
             "$GITHUB_REPO/releases/download/rust-v$version/$archive"
 
