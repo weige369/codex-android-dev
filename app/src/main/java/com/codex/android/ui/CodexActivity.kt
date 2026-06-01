@@ -510,7 +510,15 @@ class CodexActivity : ComponentActivity() {
 
                 when (result) {
                     is GitHubAuthPreferences.ExchangeResult.Success -> {
-                        // Fetch user info with the new token
+                        // Save token FIRST so GitHubApiClient can read it from DataStore
+                        authPrefs.updateAccessToken(
+                            accessToken = result.accessToken,
+                            tokenType = result.tokenType,
+                            expiresIn = result.expiresIn,
+                            grantedScope = result.grantedScope
+                        )
+
+                        // Now fetch user info using the saved token
                         val apiClient = com.codex.android.codex.github.GitHubApiClient(this@CodexActivity)
                         val userResult = apiClient.getCurrentUser()
 
@@ -527,6 +535,7 @@ class CodexActivity : ComponentActivity() {
                                 followers = ghUser.followers,
                                 following = ghUser.following
                             )
+                            authPrefs.updateUserInfo(gitHubUser)
                             authPrefs.saveAuthInfo(
                                 accessToken = result.accessToken,
                                 tokenType = result.tokenType,
