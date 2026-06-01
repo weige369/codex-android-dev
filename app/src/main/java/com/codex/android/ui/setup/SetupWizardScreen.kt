@@ -127,6 +127,7 @@ fun SetupWizardScreen(
 
             // 步骤内容
             AnimatedContent(
+                modifier = Modifier.weight(1f),
                 targetState = currentStep,
                 transitionSpec = {
                     if (targetState > initialState) {
