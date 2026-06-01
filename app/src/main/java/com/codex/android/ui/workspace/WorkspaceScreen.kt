@@ -20,6 +20,7 @@ import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -41,6 +42,11 @@ import com.codex.android.agent.NativeAgentService
 import com.codex.android.agent.ProotAgentService
 import com.codex.android.agent.ChatAgent
 import com.codex.android.agent.AgentOrchestrator
+import com.codex.android.agent.AgentConnectionState
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -106,19 +112,41 @@ fun WorkspaceScreen(
             val ctx = LocalContext.current
             val nativeAgent = remember(ctx) { NativeAgentService.getInstance(ctx) }
             val prootAgent = remember(ctx) { ProotAgentService.getInstance(ctx) }
-            // Agent mode selection: proot agent when available, fallback to native
+            val prootReady = remember { mutableStateOf(false) }
+            
+            // Check proot readiness periodically
+            LaunchedEffect(Unit) {
+                while (true) {
+                    prootReady.value = prootAgent.isProotReady()
+                    delay(3000)
+                }
+            }
+            
+            // Agent mode selection
             val selectedAgentType = remember { mutableStateOf(AgentOrchestrator.AgentType.NATIVE) }
-            val chatAgent: ChatAgent = if (selectedAgentType.value != AgentOrchestrator.AgentType.NATIVE && prootAgent.isProotReady()) {
+            val chatAgent: ChatAgent = if (selectedAgentType.value != AgentOrchestrator.AgentType.NATIVE && prootReady.value) {
                 prootAgent.also { it.selectAgent(selectedAgentType.value) }
             } else {
                 nativeAgent
             }
+            
             if (runtimeState == RuntimeState.NATIVE_MODE) {
-                NativeChatView(
-                    agent = chatAgent,
-                    modifier = Modifier.fillMaxSize()
-                )
+                Column(modifier = Modifier.fillMaxSize()) {
+                    // Agent type selector bar
+                    AgentTypeSelector(
+                        selectedType = selectedAgentType.value,
+                        prootReady = prootReady.value,
+                        onTypeSelected = { selectedAgentType.value = it }
+                    )
+                    NativeChatView(
+                        agent = chatAgent,
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .weight(1f)
+                    )
+                }
             } else {
+
                 // Binary mode: use WebView
                 if (!isRunning && !isWsConnected) {
                     StartPlaceholder(
@@ -745,6 +773,83 @@ fun forwardStatusToWebView(
             }
         } catch (e: Exception) {
             android.util.Log.e("forwardStatusToWebView", "JS call failed", e)
+        }
+    }
+}
+
+/**
+ * Agent 类型选择器。
+ * 
+ * 品牌色芯片组：Native（内置API）/ Codex CLI / OpenCode / OpenManus
+ * Proot agent 仅在 proot 环境就绪时可选。
+ */
+@Composable
+private fun AgentTypeSelector(
+    selectedType: AgentOrchestrator.AgentType,
+    prootReady: Boolean,
+    onTypeSelected: (AgentOrchestrator.AgentType) -> Unit
+) {
+    val agentTypes = listOf(
+        AgentOrchestrator.AgentType.NATIVE to "Native",
+        AgentOrchestrator.AgentType.CODEX to "Codex CLI",
+        AgentOrchestrator.AgentType.OPENCODE to "OpenCode",
+        AgentOrchestrator.AgentType.OPENMANUS to "OpenManus"
+    )
+    
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(CodexSurface.copy(alpha = 0.95f))
+            .padding(horizontal = 12.dp, vertical = 4.dp),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        agentTypes.forEach { (type, label) ->
+            val isProotAgent = type != AgentOrchestrator.AgentType.NATIVE
+            val enabled = !isProotAgent || prootReady
+            val selected = selectedType == type
+            
+            FilterChip(
+                selected = selected,
+                onClick = { if (enabled) onTypeSelected(type) },
+                label = {
+                    Text(
+                        text = label,
+                        fontSize = 11.sp,
+                        fontFamily = FontFamily.Monospace,
+                        color = when {
+                            !enabled -> CodexOnSurfaceVariant.copy(alpha = 0.3f)
+                            selected -> CodexBrandOrange
+                            else -> CodexOnSurfaceVariant
+                        }
+                    )
+                },
+                enabled = enabled,
+                shape = RoundedCornerShape(12.dp),
+                colors = FilterChipDefaults.filterChipColors(
+                    selectedContainerColor = CodexBrandOrange.copy(alpha = 0.15f),
+                    containerColor = CodexSurfaceVariant.copy(alpha = 0.2f),
+                    disabledContainerColor = CodexSurfaceVariant.copy(alpha = 0.08f)
+                ),
+                border = FilterChipDefaults.filterChipBorder(
+                    borderColor = CodexOutline.copy(alpha = 0.2f),
+                    selectedBorderColor = CodexBrandOrange.copy(alpha = 0.5f),
+                    enabled = enabled,
+                    selected = selected
+                ),
+                modifier = Modifier.height(28.dp)
+            )
+        }
+        
+        // Proot status indicator
+        if (!prootReady) {
+            Spacer(modifier = Modifier.weight(1f))
+            Text(
+                text = "proot未就绪",
+                fontSize = 10.sp,
+                color = CodexOnSurfaceVariant.copy(alpha = 0.4f),
+                fontFamily = FontFamily.Monospace
+            )
         }
     }
 }
