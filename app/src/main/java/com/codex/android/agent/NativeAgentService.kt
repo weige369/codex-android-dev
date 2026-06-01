@@ -267,6 +267,8 @@ class NativeAgentService(private val context: Context) : ChatAgent {
                             ?.optJSONObject(0)?.optJSONObject("delta")
                         delta?.optString("reasoning_content", "")?.takeIf { it.isNotEmpty() }?.let {
                             currentThinkingContent += it
+                            // 发送思考内容给 UI（使用特殊标记 <think/> 让 NativeChatView 识别）
+                            onChunk("<think/>$it")
                         }
                     } catch (_: Exception) {}
                 }
