@@ -82,7 +82,7 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.codex.android.agent.NativeAgentService
+import com.codex.android.agent.ChatAgent
 import com.codex.android.ui.theme.CodexBrandOrange
 import com.codex.android.ui.theme.CodexCodeBg
 import com.codex.android.ui.theme.CodexOnSurface
@@ -147,7 +147,7 @@ data class ToolCallInfo(
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun NativeChatView(
-    agent: NativeAgentService,
+    agent: ChatAgent,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -1496,7 +1496,7 @@ private fun ChatInputArea(
  * 统一处理 onChunk/onComplete/onError 回调，解析思考过程和工具调用。
  */
 private suspend fun sendUserMessage(
-    agent: NativeAgentService,
+    agent: ChatAgent,
     prompt: String,
     messages: SnapshotStateList<ChatMessage>,
     onStreamingChange: (Boolean) -> Unit,
