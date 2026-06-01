@@ -45,7 +45,6 @@ import com.codex.android.agent.ChatAgent
 import com.codex.android.agent.AgentOrchestrator
 import com.codex.android.agent.AgentConnectionState
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.ui.platform.LocalContext
@@ -781,7 +780,7 @@ fun forwardStatusToWebView(
 /**
  * Agent 类型选择器。
  * 
- * 品牌色芯片组：Native（内置API）/ Codex CLI / OpenCode / OpenManus
+ * 品牌色芯片组：API直连（内置SSE） / Codex CLI / OpenCode / OpenManus
  * Proot agent 仅在 proot 环境就绪时可选。
  */
 @Composable
@@ -791,7 +790,7 @@ private fun AgentTypeSelector(
     onTypeSelected: (AgentOrchestrator.AgentType) -> Unit
 ) {
     val agentTypes = listOf(
-        AgentOrchestrator.AgentType.NATIVE to "Native",
+        AgentOrchestrator.AgentType.NATIVE to "API 直连",
         AgentOrchestrator.AgentType.CODEX to "Codex CLI",
         AgentOrchestrator.AgentType.OPENCODE to "OpenCode",
         AgentOrchestrator.AgentType.OPENMANUS to "OpenManus"
@@ -846,7 +845,7 @@ private fun AgentTypeSelector(
         if (!prootReady) {
             Spacer(modifier = Modifier.weight(1f))
             Text(
-                text = "proot未就绪",
+                text = "proot未就绪，仅API直连可用",
                 fontSize = 10.sp,
                 color = CodexOnSurfaceVariant.copy(alpha = 0.4f),
                 fontFamily = FontFamily.Monospace
