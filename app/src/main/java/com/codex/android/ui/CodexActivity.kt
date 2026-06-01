@@ -15,8 +15,6 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -24,24 +22,21 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.*
-import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
-import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
+import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.core.view.WindowCompat
 import androidx.lifecycle.lifecycleScope
 import com.codex.android.bridge.CodexBridge
 import com.codex.android.codex.CodexManager
@@ -57,10 +52,11 @@ import com.codex.android.ui.github.GitHubImportScreen
 import com.codex.android.ui.mcp.CodexMCPScreen
 import com.codex.android.ui.settings.CodexSettingsScreen
 import com.codex.android.ui.settings.ApiProviderScreen
-import com.codex.android.agent.NativeAgentService
 import com.codex.android.ui.skills.CodexSkillsScreen
 import com.codex.android.ui.theme.CodexTheme
 import com.codex.android.ui.theme.CodexPrimary
+import com.codex.android.ui.theme.CodexBackground
+import com.codex.android.ui.theme.CodexOnSurface
 import com.codex.android.ui.workspace.WorkspaceScreen
 import com.codex.android.ui.workspace.forwardStatusToWebView
 import com.codex.android.ui.setup.SetupWizardScreen
@@ -114,19 +110,7 @@ class CodexActivity : ComponentActivity() {
         data object GitHubIssueList : Screen()
     }
 
-    data class BottomNavItem(
-        val title: String,
-        val selectedIcon: ImageVector,
-        val unselectedIcon: ImageVector,
-        val screen: Screen
-    )
 
-    private val bottomNavItems = listOf(
-        BottomNavItem("终端", Icons.Filled.Terminal, Icons.Outlined.Terminal, Screen.Workspace),
-        BottomNavItem("文件", Icons.Filled.Folder, Icons.Outlined.Folder, Screen.FileBrowser),
-        BottomNavItem("环境", Icons.Filled.Build, Icons.Outlined.Build, Screen.DevEnvironment),
-        BottomNavItem("设置", Icons.Filled.Settings, Icons.Outlined.Settings, Screen.Settings),
-    )
 
     private val notificationPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -514,26 +498,19 @@ class CodexActivity : ComponentActivity() {
 // Side Drawer Navigation Layout (Operit-inspired)
 // =============================================================================
 
-/** Navigation drawer item definition */
+/** Simplified drawer navigation item */
 data class DrawerNavItem(
     val title: String,
     val icon: ImageVector,
     val screen: CodexActivity.Screen,
-    val group: NavGroup = NavGroup.MAIN,
 )
 
-enum class NavGroup { MAIN, TOOLS, GITHUB, OTHER }
-
-/** All drawer navigation items, organized by group */
+/** Main drawer navigation items — simplified per spec */
 private val drawerNavItems = listOf(
-    DrawerNavItem("工作区", Icons.Outlined.Terminal, CodexActivity.Screen.Workspace, NavGroup.MAIN),
-    DrawerNavItem("文件管理", Icons.Outlined.Folder, CodexActivity.Screen.FileBrowser, NavGroup.MAIN),
-    DrawerNavItem("开发环境", Icons.Outlined.Build, CodexActivity.Screen.DevEnvironment, NavGroup.TOOLS),
-    DrawerNavItem("MCP", Icons.Outlined.Extension, CodexActivity.Screen.MCP, NavGroup.TOOLS),
-    DrawerNavItem("Skills", Icons.Outlined.AutoAwesome, CodexActivity.Screen.Skills, NavGroup.TOOLS),
-    DrawerNavItem("GitHub", Icons.Outlined.Code, CodexActivity.Screen.GitHubImport, NavGroup.GITHUB),
-    DrawerNavItem("诊断", Icons.Outlined.BugReport, CodexActivity.Screen.Diagnostic, NavGroup.OTHER),
-    DrawerNavItem("设置", Icons.Outlined.Settings, CodexActivity.Screen.Settings, NavGroup.OTHER),
+    DrawerNavItem("终端", Icons.Outlined.Terminal, CodexActivity.Screen.Workspace),
+    DrawerNavItem("文件", Icons.Outlined.Folder, CodexActivity.Screen.FileBrowser),
+    DrawerNavItem("环境", Icons.Outlined.Build, CodexActivity.Screen.DevEnvironment),
+    DrawerNavItem("设置", Icons.Outlined.Settings, CodexActivity.Screen.Settings),
 )
 
 /** Get the title for current screen to display in top bar */
@@ -554,12 +531,19 @@ private fun screenTitle(screen: CodexActivity.Screen): String = when (screen) {
     is CodexActivity.Screen.GitHubRepo -> "仓库详情"
 }
 
+// Codex brand colors for drawer
+private val DrawerBackground = CodexBackground       // #1A1818
+private val DrawerAccent = CodexPrimary              // #F54E00
+private val DrawerText = Color(0xFFE8E6E3)           // onSurface text
+private val DrawerTextVariant = Color(0xFF9E9890)    // secondary text
+
 /**
  * Main layout with side drawer navigation — Operit-inspired elastic animation.
  *
  * - Drawer slides in from left with scale+alpha spring animation
  * - Main content shifts right + shrinks + rotates with rounded corners + shadow
  * - Top bar with hamburger menu + page title
+ * - Simplified: no waterGlass/liquidGlass, direct CodexSurface color
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -589,21 +573,14 @@ fun CodexMainLayout(
         CodexActivity.Screen.Workspace -> CodexActivity.Screen.Workspace
         CodexActivity.Screen.FileBrowser -> CodexActivity.Screen.FileBrowser
         CodexActivity.Screen.DevEnvironment -> CodexActivity.Screen.DevEnvironment
-        CodexActivity.Screen.MCP -> CodexActivity.Screen.MCP
-        CodexActivity.Screen.Skills -> CodexActivity.Screen.Skills
-        CodexActivity.Screen.GitHubImport, is CodexActivity.Screen.GitHubRepo,
-        CodexActivity.Screen.GitHubPRList, CodexActivity.Screen.GitHubIssueList -> CodexActivity.Screen.GitHubImport
-        CodexActivity.Screen.Diagnostic -> CodexActivity.Screen.Diagnostic
         CodexActivity.Screen.Settings, CodexActivity.Screen.ApiProvider -> CodexActivity.Screen.Settings
         CodexActivity.Screen.About -> CodexActivity.Screen.About
-        CodexActivity.Screen.SetupWizard -> CodexActivity.Screen.Workspace
         else -> currentScreen
     }
 
     ModalNavigationDrawer(
         drawerState = drawerState,
         drawerContent = {
-            // Drawer content with spring scale+alpha animation
             DrawerContent(
                 drawerFraction = drawerFraction,
                 selectedScreen = selectedScreen,
@@ -668,7 +645,7 @@ fun CodexMainLayout(
 }
 
 /**
- * Top app bar with hamburger menu + title + optional action slot.
+ * Top app bar with hamburger menu + title.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -698,14 +675,15 @@ private fun CodexTopBar(
         },
         colors = TopAppBarDefaults.topAppBarColors(
             containerColor = Color.Transparent,
-            titleContentColor = MaterialTheme.colorScheme.onSurface,
-            navigationIconContentColor = MaterialTheme.colorScheme.onSurface,
+            titleContentColor = DrawerText,
+            navigationIconContentColor = DrawerText,
         )
     )
 }
 
 /**
- * Drawer content — Operit-inspired with grouped items, brand header, and bottom shortcuts.
+ * Drawer content — simplified Operit-style with brand header, main nav items, and about at bottom.
+ * Uses Codex brand colors (#1A1818 background, #F54E00 accent, #E8E6E3 text).
  */
 @Composable
 private fun DrawerContent(
@@ -713,8 +691,6 @@ private fun DrawerContent(
     selectedScreen: CodexActivity.Screen,
     onNavigate: (CodexActivity.Screen) -> Unit,
 ) {
-    val colorScheme = MaterialTheme.colorScheme
-
     Column(
         modifier = Modifier
             .fillMaxHeight()
@@ -724,9 +700,9 @@ private fun DrawerContent(
                 scaleX = 0.92f + 0.08f * drawerFraction
                 scaleY = 0.92f + 0.08f * drawerFraction
                 alpha = 0.72f + 0.28f * drawerFraction
-                transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0f, 0.5f)
+                transformOrigin = TransformOrigin(0f, 0.5f)
             }
-            .background(colorScheme.surface.copy(alpha = 0.96f))
+            .background(DrawerBackground)
             .verticalScroll(rememberScrollState())
             .padding(vertical = 16.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -737,7 +713,7 @@ private fun DrawerContent(
         Icon(
             imageVector = Icons.Filled.Terminal,
             contentDescription = null,
-            tint = colorScheme.primary,
+            tint = DrawerAccent,
             modifier = Modifier.size(48.dp)
         )
 
@@ -747,91 +723,51 @@ private fun DrawerContent(
             text = "Codex",
             style = MaterialTheme.typography.headlineSmall,
             fontWeight = FontWeight.Bold,
-            color = colorScheme.primary,
+            color = DrawerAccent,
         )
 
         Text(
             text = "AI Development Environment",
             style = MaterialTheme.typography.bodySmall,
-            color = colorScheme.onSurfaceVariant,
+            color = DrawerTextVariant,
         )
 
         Spacer(Modifier.height(16.dp))
 
         HorizontalDivider(
             modifier = Modifier.padding(horizontal = 16.dp),
-            color = colorScheme.outline.copy(alpha = 0.3f),
+            color = Color(0xFF3D3835),
         )
 
         Spacer(Modifier.height(8.dp))
 
-        // ── Navigation items by group ──
-        val groups = NavGroup.entries
-        for (group in groups) {
-            val groupItems = drawerNavItems.filter { it.group == group }
-            if (groupItems.isEmpty()) continue
-
-            // Group label
-            val groupLabel = when (group) {
-                NavGroup.MAIN -> "主要"
-                NavGroup.TOOLS -> "工具"
-                NavGroup.GITHUB -> "GitHub"
-                NavGroup.OTHER -> "其他"
-            }
-            Text(
-                text = groupLabel,
-                style = MaterialTheme.typography.labelSmall,
-                color = colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-                fontWeight = FontWeight.SemiBold,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 24.dp, vertical = 6.dp),
+        // ── Main navigation items ──
+        drawerNavItems.forEach { item ->
+            val isSelected = item.screen == selectedScreen
+            DrawerNavItem(
+                title = item.title,
+                icon = item.icon,
+                isSelected = isSelected,
+                onClick = { onNavigate(item.screen) },
             )
-
-            groupItems.forEach { item ->
-                val isSelected = item.screen == selectedScreen
-                DrawerNavItem(
-                    item = item,
-                    isSelected = isSelected,
-                    onClick = { onNavigate(item.screen) },
-                )
-            }
-
-            Spacer(Modifier.height(4.dp))
         }
 
         Spacer(Modifier.weight(1f))
 
         HorizontalDivider(
             modifier = Modifier.padding(horizontal = 16.dp),
-            color = colorScheme.outline.copy(alpha = 0.3f),
+            color = Color(0xFF3D3835),
         )
 
         Spacer(Modifier.height(8.dp))
 
-        // ── Bottom shortcut row ──
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp),
-            horizontalArrangement = Arrangement.SpaceEvenly,
-        ) {
-            BottomShortcut(
-                icon = Icons.Outlined.Info,
-                label = "关于",
-                onClick = { onNavigate(CodexActivity.Screen.About) }
-            )
-            BottomShortcut(
-                icon = Icons.Outlined.HelpOutline,
-                label = "帮助",
-                onClick = { onNavigate(CodexActivity.Screen.Diagnostic) }
-            )
-            BottomShortcut(
-                icon = Icons.Outlined.Settings,
-                label = "设置",
-                onClick = { onNavigate(CodexActivity.Screen.Settings) }
-            )
-        }
+        // ── About at bottom ──
+        DrawerNavItem(
+            title = "关于",
+            icon = Icons.Outlined.Info,
+            isSelected = selectedScreen == CodexActivity.Screen.About,
+            onClick = { onNavigate(CodexActivity.Screen.About) },
+        )
 
         Spacer(Modifier.height(16.dp))
     }
@@ -839,23 +775,22 @@ private fun DrawerContent(
 
 /**
  * Single drawer navigation item — rounded card with bottom accent bar when selected.
+ * Uses Codex brand colors: accent #F54E00, text #E8E6E3.
  */
 @Composable
 private fun DrawerNavItem(
-    item: DrawerNavItem,
+    title: String,
+    icon: ImageVector,
     isSelected: Boolean,
     onClick: () -> Unit,
 ) {
-    val colorScheme = MaterialTheme.colorScheme
-    val accentColor = colorScheme.primary
-
     Surface(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 12.dp, vertical = 2.dp),
         shape = RoundedCornerShape(12.dp),
         color = if (isSelected) {
-            accentColor.copy(alpha = 0.12f)
+            DrawerAccent.copy(alpha = 0.15f)
         } else {
             Color.Transparent
         },
@@ -870,17 +805,17 @@ private fun DrawerNavItem(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Icon(
-                    imageVector = item.icon,
-                    contentDescription = item.title,
-                    tint = if (isSelected) accentColor else colorScheme.onSurfaceVariant,
+                    imageVector = icon,
+                    contentDescription = title,
+                    tint = if (isSelected) DrawerAccent else DrawerTextVariant,
                     modifier = Modifier.size(22.dp),
                 )
                 Spacer(Modifier.width(14.dp))
                 Text(
-                    text = item.title,
+                    text = title,
                     style = MaterialTheme.typography.bodyLarge,
                     fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
-                    color = if (isSelected) accentColor else colorScheme.onSurface,
+                    color = if (isSelected) DrawerAccent else DrawerText,
                 )
             }
             // Bottom accent bar for selected state
@@ -893,87 +828,12 @@ private fun DrawerNavItem(
                         .padding(horizontal = 24.dp)
                         .drawBehind {
                             drawRoundRect(
-                                color = accentColor,
-                                cornerRadius = androidx.compose.ui.geometry.CornerRadius(1.dp.toPx()),
+                                color = DrawerAccent,
+                                cornerRadius = CornerRadius(1.dp.toPx()),
                             )
                         }
                 )
             }
-        }
-    }
-}
-
-/**
- * Bottom shortcut button in the drawer footer.
- */
-@Composable
-private fun BottomShortcut(
-    icon: ImageVector,
-    label: String,
-    onClick: () -> Unit,
-) {
-    val colorScheme = MaterialTheme.colorScheme
-
-    Surface(
-        modifier = Modifier,
-        shape = RoundedCornerShape(10.dp),
-        color = colorScheme.surfaceVariant.copy(alpha = 0.5f),
-        onClick = onClick,
-    ) {
-        Column(
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-        ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = label,
-                tint = colorScheme.onSurfaceVariant,
-                modifier = Modifier.size(20.dp),
-            )
-            Spacer(Modifier.height(2.dp))
-            Text(
-                text = label,
-                style = MaterialTheme.typography.labelSmall,
-                color = colorScheme.onSurfaceVariant,
-            )
-        }
-    }
-}
-
-@Composable
-private fun MoreMenuItem(
-    icon: ImageVector,
-    title: String,
-    desc: String,
-    onClick: () -> Unit
-) {
-    Surface(
-        onClick = onClick,
-        shape = MaterialTheme.shapes.medium,
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        Row(
-            modifier = Modifier.padding(12.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Icon(
-                icon,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(24.dp)
-            )
-            Spacer(Modifier.width(12.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Text(title, fontWeight = FontWeight.Medium, fontSize = 15.sp)
-                Text(desc, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-            Icon(
-                Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.size(20.dp)
-            )
         }
     }
 }
