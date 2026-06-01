@@ -38,7 +38,6 @@ import androidx.compose.ui.unit.sp
 // ViewModel manually instantiated - no lifecycle-viewmodel-compose dependency
 import com.codex.android.environment.ProotEnvironment
 import com.codex.android.ui.theme.CodexPrimary
-import com.codex.android.ui.theme.UbuntuOrange
 import kotlinx.coroutines.launch
 
 /**
@@ -109,7 +108,7 @@ fun SetupWizardScreen(
     ) { viewModel.refreshPermissionStates(context) }
 
     val steps = listOf(
-        "欢迎", "权限", "Linux", "工具", "AI", "完成"
+        "欢迎", "权限", "环境", "工具", "AI", "完成"
     )
 
     Surface(
@@ -128,7 +127,6 @@ fun SetupWizardScreen(
 
             // 步骤内容
             AnimatedContent(
-                modifier = Modifier.weight(1f),
                 targetState = currentStep,
                 transitionSpec = {
                     if (targetState > initialState) {
@@ -160,6 +158,11 @@ fun SetupWizardScreen(
                             onRequestStorage = {
                                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
                                     viewModel.requestStoragePermission()?.let { storageLauncher.launch(it) }
+                                } else {
+                                    // Android 10及以下，请求传统存储权限
+                                    storageLauncher.launch(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                                        data = Uri.fromParts("package", context.packageName, null)
+                                    })
                                 }
                             },
                             onRequestNotification = {
@@ -220,7 +223,7 @@ fun SetupWizardScreen(
                         )
                     }
 
-                    Spacer(Modifier.height(16.dp))
+                    Spacer(Modifier.height(24.dp))
                 }
             }
 
@@ -271,7 +274,7 @@ private fun StepIndicator(
                         .background(
                             when {
                                 index < currentStep -> Color(0xFF2ED573) // 已完成
-                                index == currentStep -> UbuntuOrange // 当前步
+                                index == currentStep -> CodexPrimary // 当前步
                                 else -> MaterialTheme.colorScheme.outline // 未到达
                             }
                         ),
@@ -341,7 +344,7 @@ private fun WelcomeStep(
                 .clip(RoundedCornerShape(20.dp))
                 .background(
                     Brush.verticalGradient(
-                        colors = listOf(UbuntuOrange, Color(0xFFE95420).copy(alpha = 0.8f))
+                        colors = listOf(CodexPrimary, Color(0xFFE95420).copy(alpha = 0.8f))
                     )
                 ),
             contentAlignment = Alignment.Center
@@ -389,7 +392,7 @@ private fun WelcomeStep(
                         Icons.Default.PhoneAndroid,
                         contentDescription = null,
                         modifier = Modifier.size(20.dp),
-                        tint = UbuntuOrange
+                        tint = CodexPrimary
                     )
                     Spacer(Modifier.width(8.dp))
                     Text(
@@ -418,7 +421,7 @@ private fun WelcomeStep(
         Card(
             modifier = Modifier.fillMaxWidth(),
             colors = CardDefaults.cardColors(
-                containerColor = UbuntuOrange.copy(alpha = 0.08f)
+                containerColor = CodexPrimary.copy(alpha = 0.08f)
             ),
             shape = RoundedCornerShape(12.dp)
         ) {
@@ -439,7 +442,7 @@ private fun WelcomeStep(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(48.dp),
-            colors = ButtonDefaults.buttonColors(containerColor = UbuntuOrange),
+            colors = ButtonDefaults.buttonColors(containerColor = CodexPrimary),
             shape = RoundedCornerShape(12.dp)
         ) {
             Icon(Icons.Default.RocketLaunch, null, modifier = Modifier.size(20.dp))
@@ -500,7 +503,7 @@ private fun PermissionStep(
             Icons.Default.Security,
             contentDescription = null,
             modifier = Modifier.size(56.dp),
-            tint = UbuntuOrange
+            tint = CodexPrimary
         )
 
         Spacer(Modifier.height(12.dp))
@@ -680,8 +683,8 @@ private fun PermissionCard(
                     onClick = onRequest,
                     contentPadding = PaddingValues(horizontal = 14.dp, vertical = 4.dp),
                     colors = ButtonDefaults.filledTonalButtonColors(
-                        containerColor = UbuntuOrange.copy(alpha = 0.15f),
-                        contentColor = UbuntuOrange
+                        containerColor = CodexPrimary.copy(alpha = 0.15f),
+                        contentColor = CodexPrimary
                     )
                 ) {
                     Text("授权", fontSize = 12.sp, fontWeight = FontWeight.Medium)
@@ -712,7 +715,7 @@ private fun LinuxStep(
             Icons.Default.Terminal,
             contentDescription = null,
             modifier = Modifier.size(56.dp),
-            tint = UbuntuOrange
+            tint = CodexPrimary
         )
 
         Spacer(Modifier.height(12.dp))
@@ -778,8 +781,8 @@ private fun LinuxStep(
                     },
                     modifier = Modifier.weight(1f),
                     colors = FilterChipDefaults.filterChipColors(
-                        selectedContainerColor = UbuntuOrange.copy(alpha = 0.15f),
-                        selectedLabelColor = UbuntuOrange
+                        selectedContainerColor = CodexPrimary.copy(alpha = 0.15f),
+                        selectedLabelColor = CodexPrimary
                     )
                 )
             }
@@ -816,7 +819,7 @@ private fun LinuxStep(
                             .fillMaxWidth()
                             .height(6.dp)
                             .clip(RoundedCornerShape(3.dp)),
-                        color = UbuntuOrange,
+                        color = CodexPrimary,
                         trackColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
                     )
                     Spacer(Modifier.height(4.dp))
@@ -862,7 +865,7 @@ private fun LinuxStep(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(48.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = UbuntuOrange),
+                colors = ButtonDefaults.buttonColors(containerColor = CodexPrimary),
                 shape = RoundedCornerShape(12.dp)
             ) {
                 Icon(Icons.Default.Download, null, modifier = Modifier.size(20.dp))
@@ -914,7 +917,7 @@ private fun DistroCard(
             .clickable(onClick = onSelect),
         colors = CardDefaults.cardColors(
             containerColor = if (isSelected)
-                UbuntuOrange.copy(alpha = 0.1f)
+                CodexPrimary.copy(alpha = 0.1f)
             else
                 MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
         ),
@@ -929,7 +932,7 @@ private fun DistroCard(
             RadioButton(
                 selected = isSelected,
                 onClick = onSelect,
-                colors = RadioButtonDefaults.colors(selectedColor = UbuntuOrange)
+                colors = RadioButtonDefaults.colors(selectedColor = CodexPrimary)
             )
             Spacer(Modifier.width(8.dp))
             Column(modifier = Modifier.weight(1f)) {
@@ -940,9 +943,9 @@ private fun DistroCard(
                         Text(
                             "推荐",
                             fontSize = 10.sp,
-                            color = UbuntuOrange,
+                            color = CodexPrimary,
                             modifier = Modifier
-                                .background(UbuntuOrange.copy(alpha = 0.1f), RoundedCornerShape(4.dp))
+                                .background(CodexPrimary.copy(alpha = 0.1f), RoundedCornerShape(4.dp))
                                 .padding(horizontal = 6.dp, vertical = 2.dp)
                         )
                     }
@@ -980,7 +983,7 @@ private fun DevToolsStep(
             Icons.Default.Build,
             contentDescription = null,
             modifier = Modifier.size(56.dp),
-            tint = UbuntuOrange
+            tint = CodexPrimary
         )
 
         Spacer(Modifier.height(12.dp))
@@ -1013,7 +1016,7 @@ private fun DevToolsStep(
             )
             Row {
                 TextButton(onClick = onSelectAll, contentPadding = PaddingValues(horizontal = 8.dp)) {
-                    Text("全选", fontSize = 12.sp, color = UbuntuOrange)
+                    Text("全选", fontSize = 12.sp, color = CodexPrimary)
                 }
                 TextButton(onClick = onClearAll, contentPadding = PaddingValues(horizontal = 8.dp)) {
                     Text("取消全选", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -1038,7 +1041,7 @@ private fun DevToolsStep(
                     category.name,
                     fontWeight = FontWeight.Bold,
                     fontSize = 14.sp,
-                    color = UbuntuOrange
+                    color = CodexPrimary
                 )
             }
 
@@ -1076,7 +1079,7 @@ private fun DevToolsStep(
                             .fillMaxWidth()
                             .height(6.dp)
                             .clip(RoundedCornerShape(3.dp)),
-                        color = UbuntuOrange,
+                        color = CodexPrimary,
                         trackColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
                     )
                 }
@@ -1106,8 +1109,8 @@ private fun DevToolsStep(
                     .fillMaxWidth()
                     .height(48.dp),
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = UbuntuOrange,
-                    disabledContainerColor = UbuntuOrange.copy(alpha = 0.3f)
+                    containerColor = CodexPrimary,
+                    disabledContainerColor = CodexPrimary.copy(alpha = 0.3f)
                 ),
                 shape = RoundedCornerShape(12.dp)
             ) {
@@ -1150,7 +1153,7 @@ private fun ToolItem(
             ),
         colors = CardDefaults.cardColors(
             containerColor = if (isSelected)
-                UbuntuOrange.copy(alpha = 0.08f)
+                CodexPrimary.copy(alpha = 0.08f)
             else
                 MaterialTheme.colorScheme.surface.copy(alpha = 0.3f)
         ),
@@ -1164,7 +1167,7 @@ private fun ToolItem(
                 checked = isSelected,
                 onCheckedChange = { onToggle() },
                 enabled = isEnabled,
-                colors = CheckboxDefaults.colors(checkedColor = UbuntuOrange)
+                colors = CheckboxDefaults.colors(checkedColor = CodexPrimary)
             )
             Spacer(Modifier.width(4.dp))
             Column(modifier = Modifier.weight(1f)) {
@@ -1207,7 +1210,7 @@ private fun AIConfigStep(
             Icons.Default.SmartToy,
             contentDescription = null,
             modifier = Modifier.size(56.dp),
-            tint = UbuntuOrange
+            tint = CodexPrimary
         )
 
         Spacer(Modifier.height(12.dp))
@@ -1310,7 +1313,7 @@ private fun AIConfigStep(
                 CircularProgressIndicator(
                     modifier = Modifier.size(16.dp),
                     strokeWidth = 2.dp,
-                    color = UbuntuOrange
+                    color = CodexPrimary
                 )
                 Spacer(Modifier.width(8.dp))
                 Text("正在测试连接...")
@@ -1327,12 +1330,12 @@ private fun AIConfigStep(
             val bgColor = when (connectionState.state) {
                 SetupWizardViewModel.ConnectionState.SUCCESS -> Color(0xFF2ED573).copy(alpha = 0.08f)
                 SetupWizardViewModel.ConnectionState.FAILED -> Color(0xFFFF4757).copy(alpha = 0.08f)
-                else -> UbuntuOrange.copy(alpha = 0.08f)
+                else -> CodexPrimary.copy(alpha = 0.08f)
             }
             val iconColor = when (connectionState.state) {
                 SetupWizardViewModel.ConnectionState.SUCCESS -> Color(0xFF2ED573)
                 SetupWizardViewModel.ConnectionState.FAILED -> Color(0xFFFF4757)
-                else -> UbuntuOrange
+                else -> CodexPrimary
             }
             Card(
                 colors = CardDefaults.cardColors(containerColor = bgColor),
@@ -1381,7 +1384,7 @@ private fun ProviderCard(
             .clickable(onClick = onSelect),
         colors = CardDefaults.cardColors(
             containerColor = if (isSelected)
-                UbuntuOrange.copy(alpha = 0.1f)
+                CodexPrimary.copy(alpha = 0.1f)
             else
                 MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
         ),
@@ -1394,7 +1397,7 @@ private fun ProviderCard(
             RadioButton(
                 selected = isSelected,
                 onClick = onSelect,
-                colors = RadioButtonDefaults.colors(selectedColor = UbuntuOrange)
+                colors = RadioButtonDefaults.colors(selectedColor = CodexPrimary)
             )
             Spacer(Modifier.width(4.dp))
             Text(provider.displayName, fontWeight = FontWeight.Medium, fontSize = 14.sp)
@@ -1531,7 +1534,7 @@ private fun FinishStep(
         Card(
             modifier = Modifier.fillMaxWidth(),
             colors = CardDefaults.cardColors(
-                containerColor = UbuntuOrange.copy(alpha = 0.06f)
+                containerColor = CodexPrimary.copy(alpha = 0.06f)
             ),
             shape = RoundedCornerShape(8.dp)
         ) {
@@ -1539,7 +1542,7 @@ private fun FinishStep(
                 modifier = Modifier.padding(12.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Icon(Icons.Default.Info, null, tint = UbuntuOrange, modifier = Modifier.size(18.dp))
+                Icon(Icons.Default.Info, null, tint = CodexPrimary, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(8.dp))
                 Text(
                     "可随时在「设置」或「环境」页面修改以上配置",
@@ -1621,7 +1624,7 @@ private fun BottomNavButtons(
                 Button(
                     onClick = onNext,
                     enabled = canProceed,
-                    colors = ButtonDefaults.buttonColors(containerColor = UbuntuOrange),
+                    colors = ButtonDefaults.buttonColors(containerColor = CodexPrimary),
                     shape = RoundedCornerShape(10.dp)
                 ) {
                     Text("下一步")
