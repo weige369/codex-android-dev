@@ -50,12 +50,9 @@ class ProotAgentService(private val context: Context) : ChatAgent {
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
     // ===== 连接状态（兼容 NativeAgentService 接口）=====
-    enum class ConnectionState {
-        DISCONNECTED, CONNECTING, CONNECTED, STREAMING, ERROR
-    }
 
-    private val _connectionState = MutableStateFlow(ConnectionState.DISCONNECTED)
-    val connectionState: StateFlow<ConnectionState> = _connectionState.asStateFlow()
+    private val _connectionState = MutableStateFlow(AgentConnectionState.DISCONNECTED)
+    override val connectionState: StateFlow<AgentConnectionState> = _connectionState.asStateFlow()
 
     // ===== 当前 Agent 类型 =====
     private var currentAgentType: AgentOrchestrator.AgentType = AgentOrchestrator.AgentType.CODEX
@@ -119,24 +116,24 @@ class ProotAgentService(private val context: Context) : ChatAgent {
      * 必须在 sendPromptStream 之前调用。
      */
     suspend fun connect(): Boolean {
-        if (_connectionState.value == ConnectionState.CONNECTED ||
-            _connectionState.value == ConnectionState.STREAMING
+        if (_connectionState.value == AgentConnectionState.CONNECTED ||
+            _connectionState.value == AgentConnectionState.STREAMING
         ) {
             return true
         }
 
-        _connectionState.value = ConnectionState.CONNECTING
+        _connectionState.value = AgentConnectionState.CONNECTING
 
         // 检查 proot 环境
         if (!isProotReady()) {
-            _connectionState.value = ConnectionState.ERROR
+            _connectionState.value = AgentConnectionState.ERROR
             Log.e(TAG, "proot 环境未就绪")
             return false
         }
 
         // 检查 Agent 是否已安装
         if (!binaryManager.isInstalled(currentAgentType)) {
-            _connectionState.value = ConnectionState.ERROR
+            _connectionState.value = AgentConnectionState.ERROR
             Log.e(TAG, "${currentAgentType.displayName} 未安装")
             return false
         }
@@ -154,11 +151,11 @@ class ProotAgentService(private val context: Context) : ChatAgent {
         )
 
         if (success) {
-            _connectionState.value = ConnectionState.CONNECTED
+            _connectionState.value = AgentConnectionState.CONNECTED
             startOutputCollection()
             Log.i(TAG, "${currentAgentType.displayName} 已连接")
         } else {
-            _connectionState.value = ConnectionState.ERROR
+            _connectionState.value = AgentConnectionState.ERROR
             Log.e(TAG, "${currentAgentType.displayName} 启动失败")
         }
 
@@ -171,7 +168,7 @@ class ProotAgentService(private val context: Context) : ChatAgent {
      * 兼容 NativeAgentService.sendPromptStream 的接口。
      * 流程：写入 agent stdin → 收集 stdout → 空闲超时视为完成
      */
-    fun sendPromptStream(
+    override fun sendPromptStream(
         prompt: String,
         onChunk: (String) -> Unit,
         onComplete: (String) -> Unit,
@@ -179,8 +176,8 @@ class ProotAgentService(private val context: Context) : ChatAgent {
     ) {
         scope.launch {
             // 确保已连接
-            if (_connectionState.value != ConnectionState.CONNECTED &&
-                _connectionState.value != ConnectionState.STREAMING
+            if (_connectionState.value != AgentConnectionState.CONNECTED &&
+                _connectionState.value != AgentConnectionState.STREAMING
             ) {
                 val connected = connect()
                 if (!connected) {
@@ -189,7 +186,7 @@ class ProotAgentService(private val context: Context) : ChatAgent {
                 }
             }
 
-            _connectionState.value = ConnectionState.STREAMING
+            _connectionState.value = AgentConnectionState.STREAMING
             responseBuffer.clear()
             isCollectingResponse = true
             lastOutputTime = System.currentTimeMillis()
@@ -202,7 +199,7 @@ class ProotAgentService(private val context: Context) : ChatAgent {
             // 发送 prompt 到 stdin
             val sent = processManager.sendInput(prompt)
             if (!sent) {
-                _connectionState.value = ConnectionState.ERROR
+                _connectionState.value = AgentConnectionState.ERROR
                 onError("发送消息失败，Agent 进程可能已退出")
                 cleanupResponse()
                 return@launch
@@ -220,7 +217,7 @@ class ProotAgentService(private val context: Context) : ChatAgent {
      */
     fun disconnect() {
         processManager.stop()
-        _connectionState.value = ConnectionState.DISCONNECTED
+        _connectionState.value = AgentConnectionState.DISCONNECTED
         cleanupResponse()
         Log.i(TAG, "Agent 已断开")
     }
@@ -341,7 +338,7 @@ class ProotAgentService(private val context: Context) : ChatAgent {
                             }
                             cleanupResponse()
                         }
-                        _connectionState.value = ConnectionState.ERROR
+                        _connectionState.value = AgentConnectionState.ERROR
                     }
                     else -> {}
                 }
@@ -363,7 +360,7 @@ class ProotAgentService(private val context: Context) : ChatAgent {
                     val response = responseBuffer.toString().trim()
                     currentOnComplete?.invoke(response)
                     cleanupResponse()
-                    _connectionState.value = ConnectionState.CONNECTED
+                    _connectionState.value = AgentConnectionState.CONNECTED
                     Log.d(TAG, "响应完成 (空闲超时 ${RESPONSE_IDLE_TIMEOUT_MS}ms), ${response.length} 字符")
                     break
                 }
@@ -387,5 +384,12 @@ class ProotAgentService(private val context: Context) : ChatAgent {
     /**
      * 是否已配置 API。
      */
-    fun isConfigured(): Boolean = getApiKey().isNotBlank() && getApiUrl().isNotBlank()
+    override fun cancelStream() {
+        processManager.stop()
+        _connectionState.value = AgentConnectionState.DISCONNECTED
+        cleanupResponse()
+        Log.i(TAG, "Stream cancelled")
+    }
+
+    override fun isConfigured(): Boolean = getApiKey().isNotBlank() && getApiUrl().isNotBlank()
 }
