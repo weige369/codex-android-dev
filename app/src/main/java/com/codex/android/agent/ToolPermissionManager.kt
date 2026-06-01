@@ -210,9 +210,9 @@ class ToolPermissionManager private constructor(private val context: Context) {
                     suspendCancellableCoroutine { continuation ->
                         pendingResult = { decision ->
                             when (decision) {
-                                PermissionDecision.ALLOW -> continuation.resume(true)
-                                PermissionDecision.FORBID -> continuation.resume(false)
-                                PermissionDecision.ASK -> continuation.resume(false)
+                                PermissionDecision.ALLOW -> continuation.resumeWith(kotlin.Result.success(true))
+                                PermissionDecision.FORBID -> continuation.resumeWith(kotlin.Result.success(false))
+                                PermissionDecision.ASK -> continuation.resumeWith(kotlin.Result.success(false))
                             }
                         }
                     }
