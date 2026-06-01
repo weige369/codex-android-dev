@@ -15,7 +15,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import com.codex.android.ui.theme.CodexBrandOrange
+import com.codex.android.ui.theme.*
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -33,11 +33,16 @@ fun AboutScreen(
     var showPrivacy by remember { mutableStateOf(false) }
 
     Scaffold(
+        containerColor = CodexBackground,
         topBar = {
             TopAppBar(
-                title = { Text("关于", fontSize = 18.sp) },
-                navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "返回") } },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface)
+                title = { Text("关于", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = CodexOnSurface) },
+                navigationIcon = { 
+                    IconButton(onClick = onBack) { 
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "返回", tint = CodexOnSurface) 
+                    } 
+                },
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = CodexBackground)
             )
         }
     ) { padding ->
@@ -47,7 +52,8 @@ fun AboutScreen(
             // Logo & Info
             Card(
                 modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+                shape = RoundedCornerShape(12.dp),
+                colors = CardDefaults.cardColors(containerColor = CodexSurfaceVariant)
             ) {
                 Column(
                     modifier = Modifier.fillMaxWidth().padding(24.dp),
@@ -63,13 +69,13 @@ fun AboutScreen(
                         }
                     }
                     Spacer(Modifier.height(12.dp))
-                    Text("Codex Android", fontWeight = FontWeight.Bold, fontSize = 20.sp)
-                    Text("v${CodexManager.CODEX_VERSION}", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("Codex Android", fontWeight = FontWeight.Bold, fontSize = 20.sp, color = CodexBrandOrange)
+                    Text("v${CodexManager.CODEX_VERSION}", fontSize = 13.sp, color = CodexOnSurfaceVariant)
                     Spacer(Modifier.height(4.dp))
                     Text(
                         "基于 OpenAI Codex CLI 的安卓原生编码代理",
                         fontSize = 12.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        color = CodexOnSurfaceVariant,
                         lineHeight = 18.sp
                     )
                 }
@@ -80,10 +86,11 @@ fun AboutScreen(
             // System Info
             Card(
                 modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+                shape = RoundedCornerShape(12.dp),
+                colors = CardDefaults.cardColors(containerColor = CodexSurfaceVariant)
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
-                    Text("系统信息", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                    CodexSectionHeader("系统信息", Icons.Default.Info)
                     Spacer(Modifier.height(8.dp))
                     InfoRow("设备", "${Build.MANUFACTURER} ${Build.MODEL}")
                     InfoRow("Android", "${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})")
@@ -97,7 +104,8 @@ fun AboutScreen(
             // Links
             Card(
                 modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+                shape = RoundedCornerShape(12.dp),
+                colors = CardDefaults.cardColors(containerColor = CodexSurfaceVariant)
             ) {
                 Column(modifier = Modifier.padding(8.dp)) {
                     AboutItem(Icons.Default.Code, "GitHub 仓库") {
@@ -117,14 +125,17 @@ fun AboutScreen(
                             context.startActivity(intent)
                         }
                     }
+                    AboutItem(Icons.Default.Favorite, "Inspired by Operit") {
+                        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/AAswordman/Operit")))
+                    }
                 }
             }
 
             Spacer(Modifier.height(24.dp))
             Text(
-                "Codex Android • 基于 Operit 改造 • 取长补短\n让 Codex 在 Android 上原生运行",
+                "Codex Android • Inspired by Operit • 让 Codex 在 Android 上原生运行",
                 fontSize = 11.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                color = CodexBrandOrange.copy(alpha = 0.6f),
                 lineHeight = 16.sp,
                 modifier = Modifier.fillMaxWidth().wrapContentWidth(Alignment.CenterHorizontally)
             )
@@ -184,10 +195,32 @@ fun AboutScreen(
     }
 }
 
+@Composable
+private fun CodexSectionHeader(title: String, icon: ImageVector) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier.padding(bottom = 4.dp)
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = CodexBrandOrange,
+            modifier = Modifier.size(16.dp)
+        )
+        Spacer(Modifier.width(6.dp))
+        Text(
+            title,
+            fontSize = 14.sp,
+            fontWeight = FontWeight.Bold,
+            color = CodexBrandOrange
+        )
+    }
+}
+
 @Composable private fun InfoRow(label: String, value: String) {
     Row(modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp)) {
-        Text("$label: ", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.width(80.dp))
-        Text(value, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+        Text("$label: ", fontSize = 13.sp, color = CodexOnSurfaceVariant, modifier = Modifier.width(80.dp))
+        Text(value, fontSize = 13.sp, fontWeight = FontWeight.Medium, color = CodexOnSurface)
     }
 }
 
@@ -196,14 +229,13 @@ fun AboutScreen(
         onClick = onClick,
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(8.dp),
-        color = MaterialTheme.colorScheme.surface
+        color = Color.Transparent
     ) {
         Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-            Icon(icon, null, modifier = Modifier.size(20.dp), tint = MaterialTheme.colorScheme.primary)
+            Icon(icon, null, modifier = Modifier.size(20.dp), tint = CodexBrandOrange)
             Spacer(Modifier.width(12.dp))
-            Text(label, fontSize = 14.sp, modifier = Modifier.weight(1f))
-            Icon(Icons.Default.KeyboardArrowRight, null, modifier = Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(label, fontSize = 14.sp, modifier = Modifier.weight(1f), color = CodexOnSurface)
+            Icon(Icons.Default.ChevronRight, null, modifier = Modifier.size(18.dp), tint = CodexOnSurfaceVariant)
         }
     }
 }
-
