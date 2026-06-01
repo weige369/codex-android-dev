@@ -28,7 +28,7 @@ import kotlinx.coroutines.flow.*
  * - Agent 输出 → 通过 SharedFlow 实时推送给 onChunk
  * - 检测响应结束：空闲超时（agent 输出停止 3 秒）或特定标记
  */
-class ProotAgentService(private val context: Context) {
+class ProotAgentService(private val context: Context) : ChatAgent {
 
     companion object {
         private const val TAG = "ProotAgentService"
