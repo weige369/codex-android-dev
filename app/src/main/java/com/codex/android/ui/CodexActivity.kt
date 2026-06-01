@@ -65,6 +65,7 @@ import com.codex.android.ui.github.GitHubRepoScreen
 import com.codex.android.ui.github.GitHubPRScreen
 import com.codex.android.ui.github.GitHubIssueScreen
 import com.codex.android.data.preferences.GitHubAuthPreferences
+import com.codex.android.data.preferences.GitHubUser
 import com.codex.android.util.AndroidShellExecutor
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
