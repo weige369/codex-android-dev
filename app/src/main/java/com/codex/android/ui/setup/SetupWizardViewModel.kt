@@ -12,6 +12,9 @@ import android.provider.Settings
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.codex.android.agent.AgentBinaryManager
+import com.codex.android.agent.AgentEnvironmentSetup
+import com.codex.android.agent.AgentOrchestrator
 import com.codex.android.data.preferences.SetupPreferences
 import com.codex.android.environment.ProotEnvironment
 import com.codex.android.util.AndroidShellExecutor
@@ -91,20 +94,56 @@ class SetupWizardViewModel : ViewModel() {
     private val _linuxInstallState = MutableStateFlow(LinuxInstallState())
     val linuxInstallState: StateFlow<LinuxInstallState> = _linuxInstallState.asStateFlow()
 
-    // ===== 开发工具 =====
-    private val _selectedTools = MutableStateFlow<Set<String>>(emptySet())
-    val selectedTools: StateFlow<Set<String>> = _selectedTools.asStateFlow()
+    // ===== Agent 选择 =====
+    data class AgentOption(
+        val type: AgentOrchestrator.AgentType,
+        val displayName: String,
+        val description: String,
+        val estimatedSize: String,
+        val requiresNodejs: Boolean = false,
+        val requiresPython: Boolean = false
+    )
 
-    data class ToolsInstallState(
+    val agentOptions = listOf(
+        AgentOption(
+            type = AgentOrchestrator.AgentType.CODEX,
+            displayName = "Codex CLI",
+            description = "OpenAI Codex 命令行 Agent（需 Node.js）",
+            estimatedSize = "~95MB",
+            requiresNodejs = true
+        ),
+        AgentOption(
+            type = AgentOrchestrator.AgentType.OPENCODE,
+            displayName = "OpenCode",
+            description = "Go 语言 AI 编程助手",
+            estimatedSize = "~25MB"
+        ),
+        AgentOption(
+            type = AgentOrchestrator.AgentType.OPENMANUS,
+            displayName = "OpenManus",
+            description = "Python AI Agent 框架（需 Python）",
+            estimatedSize = "~280MB",
+            requiresPython = true
+        )
+    )
+
+    private val _selectedAgents = MutableStateFlow<Set<AgentOrchestrator.AgentType>>(emptySet())
+    val selectedAgents: StateFlow<Set<AgentOrchestrator.AgentType>> = _selectedAgents.asStateFlow()
+
+    data class AgentInstallState(
         val isInstalling: Boolean = false,
         val progress: Float = 0f,
         val message: String = "",
         val isCompleted: Boolean = false,
+        val currentAgent: String = "",
         val error: String? = null
     )
 
-    private val _toolsInstallState = MutableStateFlow(ToolsInstallState())
-    val toolsInstallState: StateFlow<ToolsInstallState> = _toolsInstallState.asStateFlow()
+    private val _agentInstallState = MutableStateFlow(AgentInstallState())
+    val agentInstallState: StateFlow<AgentInstallState> = _agentInstallState.asStateFlow()
+
+    private var binaryManager: AgentBinaryManager? = null
+    private var envSetup: AgentEnvironmentSetup? = null
 
     // ===== AI 配置 =====
     data class AIProvider(
@@ -320,59 +359,107 @@ class SetupWizardViewModel : ViewModel() {
     }
 
     // ===== 开发工具 =====
-    fun toggleTool(packageName: String) {
-        val current = _selectedTools.value.toMutableSet()
-        if (packageName in current) current.remove(packageName) else current.add(packageName)
-        _selectedTools.value = current
+    fun toggleAgent(type: AgentOrchestrator.AgentType) {
+        val current = _selectedAgents.value.toMutableSet()
+        if (type in current) current.remove(type) else current.add(type)
+        _selectedAgents.value = current
     }
 
-    fun selectAllTools() {
-        val all = ProotEnvironment.TOOL_CATEGORIES.flatMap { it.tools }.map { it.packageName }.toSet()
-        _selectedTools.value = all
+    fun selectAllAgents() {
+        _selectedAgents.value = agentOptions.map { it.type }.toSet()
     }
 
-    fun clearAllTools() {
-        _selectedTools.value = emptySet()
+    fun clearAllAgents() {
+        _selectedAgents.value = emptySet()
     }
 
-    fun installSelectedTools(ctx: android.content.Context) {
-        val env = prootEnv ?: return
-        val tools = _selectedTools.value
-        if (tools.isEmpty()) return
+    /**
+     * 安装选中的 Agent 及其依赖环境。
+     * 流程：先安装环境依赖 → 再安装 Agent 二进制
+     */
+    fun installSelectedAgents(ctx: android.content.Context) {
+        if (binaryManager == null) binaryManager = AgentBinaryManager(ctx)
+        if (envSetup == null) envSetup = AgentEnvironmentSetup(ctx)
+        val bm = binaryManager ?: return
+        val es = envSetup ?: return
+        val agents = _selectedAgents.value
+        if (agents.isEmpty()) return
 
         viewModelScope.launch(Dispatchers.IO) {
-            _toolsInstallState.value = ToolsInstallState(isInstalling = true)
-            val ok = env.installTools(tools) { progress ->
-                _toolsInstallState.value = ToolsInstallState(
+            _agentInstallState.value = AgentInstallState(isInstalling = true, currentAgent = "环境准备")
+
+            // Step 1: 安装环境依赖（Node.js/Python 等）
+            val envOk = es.setupEnvironment(agents) { progress ->
+                _agentInstallState.value = AgentInstallState(
                     isInstalling = true,
-                    progress = progress.progress,
-                    message = progress.message
+                    progress = progress.progress * 0.3f,
+                    message = progress.message,
+                    currentAgent = "环境准备"
                 )
             }
 
-            if (ok) {
-                _toolsInstallState.value = ToolsInstallState(isCompleted = true, message = "工具安装完成!")
-                // 持久化已安装工具列表，供 NativeAgentService 读取
-                saveInstalledTools(ctx, tools)
+            if (!envOk) {
+                _agentInstallState.value = AgentInstallState(error = "环境安装失败，请检查网络")
+                return@launch
+            }
+
+            // Step 2: 逐个安装 Agent
+            val total = agents.size
+            var installed = 0
+            var allOk = true
+
+            for (option in agentOptions) {
+                if (option.type !in agents) continue
+                installed++
+                _agentInstallState.value = AgentInstallState(
+                    isInstalling = true,
+                    progress = 0.3f + (installed.toFloat() / total) * 0.65f,
+                    message = "正在安装 ${option.displayName}...",
+                    currentAgent = option.displayName
+                )
+
+                val ok = bm.install(option.type) { progress ->
+                    _agentInstallState.value = AgentInstallState(
+                        isInstalling = true,
+                        progress = 0.3f + (installed.toFloat() / total) * 0.65f + progress.progress * 0.65f / total,
+                        message = progress.message,
+                        currentAgent = option.displayName
+                    )
+                }
+
+                if (!ok) {
+                    Log.w(TAG, "安装 ${option.displayName} 失败")
+                    allOk = false
+                }
+            }
+
+            if (allOk || installed > 0) {
+                _agentInstallState.value = AgentInstallState(
+                    isCompleted = true,
+                    message = "${installed} 个 Agent 安装完成!",
+                    progress = 1f
+                )
+                // 持久化
+                val prefs = ctx.getSharedPreferences("codex_setup_prefs", android.content.Context.MODE_PRIVATE)
+                prefs.edit()
+                    .putBoolean("linux_installed", true)
+                    .putStringSet("installed_agents", agents.map { it.id }.toSet())
+                    .apply()
             } else {
-                _toolsInstallState.value = ToolsInstallState(error = "部分工具安装失败")
+                _agentInstallState.value = AgentInstallState(error = "Agent 安装失败")
             }
         }
     }
 
-    /**
-     * 将已安装的工具列表保存到 SharedPreferences。
-     * NativeAgentService 在构建 system prompt 时会读取此列表。
-     */
-    private fun saveInstalledTools(ctx: Context, tools: Set<String>) {
-        val prefs = ctx.getSharedPreferences("codex_setup_prefs", android.content.Context.MODE_PRIVATE)
-        prefs.edit().putStringSet("installed_tools", tools).apply()
-        // 同时标记 Linux 已安装
-        prefs.edit().putBoolean("linux_installed", true).apply()
-    }
-
-    fun estimateToolsSize(): String {
-        return prootEnv?.estimateToolsSize(_selectedTools.value) ?: "~0MB"
+    fun estimateAgentSize(): String {
+        var totalMB = 0
+        for (opt in agentOptions) {
+            if (opt.type in _selectedAgents.value) {
+                val sizeStr = opt.estimatedSize.replace("~", "").replace("MB", "").trim()
+                totalMB += sizeStr.toIntOrNull() ?: 0
+            }
+        }
+        return "~${totalMB}MB"
     }
 
     // ===== AI 配置 =====
