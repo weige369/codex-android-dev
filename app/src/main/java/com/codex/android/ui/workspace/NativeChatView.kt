@@ -32,6 +32,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.ExpandLess
@@ -45,6 +46,7 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
@@ -62,6 +64,10 @@ import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
@@ -123,13 +129,16 @@ data class ToolCallInfo(
 // ============================================================================
 
 /**
- * 原生 AI 聊天界面 - 专业级升级版。
+ * 原生 AI 聊天界面 - Operit 风格视觉升级版。
  *
  * 设计灵感来自 Operit ChatArea：
  * - Cursor 风格消息布局（左对齐、无气泡、标签区分）
- * - 流式 Markdown 渲染（代码块高亮+复制）
- * - 思考过程折叠（动画展开/收起）
- * - 工具调用展示（折叠式+状态图标）
+ * - 用户消息暖橙竖线装饰 + 半透明背景
+ * - 流式 Markdown 渲染（代码块高亮+复制+语言标签背景色）
+ * - 思考过程折叠（💭 emoji 标识 + 暖炭色深背景）
+ * - 工具调用展示（🔧 图标 + 彩色状态标识）
+ * - 输入区模型选择芯片 + 新建对话按钮 + 流式进度条
+ * - 空状态品牌引导
  * - 三点跳动加载动画
  * - 智能自动滚动
  * - 长按上下文菜单
@@ -150,6 +159,10 @@ fun NativeChatView(
     var currentStreamContent by remember { mutableStateOf("") }
     var currentThinkingContent by remember { mutableStateOf("") }
     val currentToolCalls = remember { mutableStateListOf<ToolCallInfo>() }
+
+    // 模型选择状态
+    val availableModels = remember { listOf("codex-1", "codex-mini", "o3-mini") }
+    var selectedModelIndex by remember { mutableStateOf(0) }
 
     // 长按菜单状态
     var menuMessageId by remember { mutableStateOf<String?>(null) }
@@ -185,11 +198,20 @@ fun NativeChatView(
             state = listState,
             modifier = Modifier
                 .weight(1f)
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp),
+                .fillMaxWidth(),
             verticalArrangement = Arrangement.spacedBy(2.dp),
-            contentPadding = androidx.compose.foundation.layout.PaddingValues(vertical = 12.dp)
+            contentPadding = androidx.compose.foundation.layout.PaddingValues(
+                horizontal = 16.dp,
+                vertical = 12.dp
+            )
         ) {
+            // ===== 空状态 =====
+            if (messages.isEmpty() && !isStreaming) {
+                item {
+                    EmptyChatState()
+                }
+            }
+
             items(
                 items = messages,
                 key = { it.id }
@@ -273,11 +295,32 @@ fun NativeChatView(
             }
         }
 
+        // ===== 流式进度条 =====
+        if (isStreaming) {
+            LinearProgressIndicator(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(2.dp),
+                color = CodexBrandOrange,
+                trackColor = CodexBrandOrange.copy(alpha = 0.15f)
+            )
+        }
+
         // ===== 输入区域 =====
         ChatInputArea(
             inputText = inputText,
             onInputTextChange = { inputText = it },
             isStreaming = isStreaming,
+            currentModel = availableModels[selectedModelIndex],
+            onModelSwitch = {
+                selectedModelIndex = (selectedModelIndex + 1) % availableModels.size
+            },
+            onNewChat = {
+                messages.clear()
+                currentStreamContent = ""
+                currentThinkingContent = ""
+                currentToolCalls.clear()
+            },
             onSend = {
                 if (inputText.isNotBlank()) {
                     val prompt = inputText
@@ -308,12 +351,83 @@ fun NativeChatView(
 }
 
 // ============================================================================
+// Empty Chat State
+// ============================================================================
+
+/**
+ * 空状态引导界面。
+ * 居中显示品牌标识 + 引导文案，参考 Operit 空状态设计。
+ */
+@Composable
+private fun EmptyChatState(
+    modifier: Modifier = Modifier
+) {
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(vertical = 80.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            // 品牌 Logo 标识
+            Box(
+                modifier = Modifier
+                    .size(64.dp)
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(CodexBrandOrange.copy(alpha = 0.12f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = "C",
+                    fontSize = 32.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = CodexBrandOrange,
+                    fontFamily = FontFamily.SansSerif
+                )
+            }
+
+            Spacer(Modifier.height(20.dp))
+
+            Text(
+                text = "Codex",
+                fontSize = 22.sp,
+                fontWeight = FontWeight.Bold,
+                color = CodexOnSurface,
+                letterSpacing = 1.sp
+            )
+
+            Spacer(Modifier.height(8.dp))
+
+            Text(
+                text = "开始对话",
+                fontSize = 14.sp,
+                color = CodexOnSurfaceVariant,
+                letterSpacing = 0.5.sp
+            )
+
+            Spacer(Modifier.height(4.dp))
+
+            Text(
+                text = "输入你的问题，让 AI 助手帮你完成",
+                fontSize = 12.sp,
+                color = CodexOnSurfaceVariant.copy(alpha = 0.6f)
+            )
+        }
+    }
+}
+
+// ============================================================================
 // Cursor-Style Message
 // ============================================================================
 
 /**
- * Cursor 风格消息组件。
+ * Cursor 风格消息组件 — Operit 视觉升级。
  * 全宽、左对齐，顶部用标签区分角色，不用气泡。
+ * 用户消息：暖橙半透明背景 + 左侧暖橙竖线装饰
+ * AI 消息：Response 标签左对齐 + 16dp 水平 padding
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -332,13 +446,6 @@ private fun CursorStyleMessage(
     val isError = message.role == "error"
     val isAssistant = message.role == "assistant"
 
-    // 用户消息带暖橙半透明背景
-    val bgColor = when {
-        isUser -> CodexBrandOrange.copy(alpha = 0.06f)
-        isError -> CodexError.copy(alpha = 0.08f)
-        else -> androidx.compose.ui.graphics.Color.Transparent
-    }
-
     Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -347,107 +454,120 @@ private fun CursorStyleMessage(
                 onLongClick = { onMenuShow(message.id) }
             )
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(bgColor, RoundedCornerShape(6.dp))
-                .padding(horizontal = 4.dp, vertical = 8.dp)
-                .animateContentSize()
-        ) {
-            // ===== 角色标签行 =====
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.padding(bottom = 6.dp)
-            ) {
-                Text(
-                    text = when {
-                        isUser -> "You"
-                        isError -> "⚠ Error"
-                        else -> "Response"
-                    },
-                    fontSize = 11.sp,
-                    fontFamily = FontFamily.SansSerif,
-                    fontWeight = FontWeight.SemiBold,
-                    color = when {
-                        isUser -> CodexBrandOrange
-                        isError -> CodexError
-                        else -> CodexOnSurfaceVariant.copy(alpha = 0.6f)
-                    },
-                    letterSpacing = 0.5.sp
-                )
+        // 用户消息：暖橙半透明背景 + 左侧暖橙竖线装饰
+        if (isUser) {
+            UserMessageLayout(message = message)
+        } else {
+            // AI / Error 消息布局
+            val bgColor = when {
+                isError -> CodexError.copy(alpha = 0.08f)
+                else -> androidx.compose.ui.graphics.Color.Transparent
+            }
 
-                // 错误消息重试按钮
-                if (isError) {
-                    Spacer(Modifier.width(8.dp))
-                    IconButton(
-                        onClick = onRetry,
-                        modifier = Modifier.size(20.dp)
-                    ) {
-                        Icon(
-                            Icons.Default.Refresh,
-                            contentDescription = "重试",
-                            tint = CodexBrandOrange,
-                            modifier = Modifier.size(14.dp)
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(bgColor, RoundedCornerShape(6.dp))
+                    .padding(horizontal = 16.dp, vertical = 2.dp)
+                    .animateContentSize()
+            ) {
+                // ===== 角色标签行 =====
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 6.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = when {
+                                isError -> "⚠ Error"
+                                else -> "Response"
+                            },
+                            fontSize = 11.sp,
+                            fontFamily = FontFamily.SansSerif,
+                            fontWeight = FontWeight.SemiBold,
+                            color = when {
+                                isError -> CodexError
+                                else -> CodexOnSurfaceVariant.copy(alpha = 0.6f)
+                            },
+                            letterSpacing = 0.5.sp
+                        )
+
+                        // 错误消息重试按钮
+                        if (isError) {
+                            Spacer(Modifier.width(8.dp))
+                            IconButton(
+                                onClick = onRetry,
+                                modifier = Modifier.size(20.dp)
+                            ) {
+                                Icon(
+                                    Icons.Default.Refresh,
+                                    contentDescription = "重试",
+                                    tint = CodexBrandOrange,
+                                    modifier = Modifier.size(14.dp)
+                                )
+                            }
+                        }
+                    }
+
+                    // Token 数右对齐
+                    if (isAssistant && message.tokenCount > 0) {
+                        Text(
+                            text = "${message.tokenCount} tokens",
+                            fontSize = 10.sp,
+                            color = CodexOnSurfaceVariant.copy(alpha = 0.4f)
                         )
                     }
                 }
 
-                // 模型名（助手消息）
-                if (isAssistant && message.tokenCount > 0) {
-                    Spacer(Modifier.width(8.dp))
-                    Text(
-                        text = "${message.tokenCount} tokens",
-                        fontSize = 10.sp,
-                        color = CodexOnSurfaceVariant.copy(alpha = 0.4f)
-                    )
-                }
-            }
-
-            // ===== 思考过程折叠区 =====
-            if (message.thinkingContent.isNotBlank()) {
-                ThinkingSection(content = message.thinkingContent)
-                Spacer(Modifier.height(6.dp))
-            }
-
-            // ===== 工具调用折叠区 =====
-            if (message.toolCalls.isNotEmpty()) {
-                message.toolCalls.forEach { toolCall ->
-                    ToolCallSection(toolCall = toolCall)
+                // ===== 思考过程折叠区 =====
+                if (message.thinkingContent.isNotBlank()) {
+                    ThinkingSection(content = message.thinkingContent)
                     Spacer(Modifier.height(6.dp))
                 }
-            }
 
-            // ===== 消息正文（Markdown 渲染） =====
-            if (message.content.isNotBlank()) {
-                MarkdownText(
-                    text = message.content,
-                    isCode = isError
-                )
-            }
+                // ===== 工具调用折叠区 =====
+                if (message.toolCalls.isNotEmpty()) {
+                    message.toolCalls.forEach { toolCall ->
+                        ToolCallSection(toolCall = toolCall)
+                        Spacer(Modifier.height(6.dp))
+                    }
+                }
 
-            // ===== 消息底部元数据 =====
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 6.dp),
-                horizontalArrangement = Arrangement.End,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                // 耗时
-                if (message.durationMs > 0) {
+                // ===== 消息正文（Markdown 渲染） =====
+                if (message.content.isNotBlank()) {
+                    MarkdownText(
+                        text = message.content,
+                        isCode = isError
+                    )
+                }
+
+                // ===== 消息底部元数据（右对齐） =====
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 4.dp),
+                    horizontalArrangement = Arrangement.End,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // 耗时
+                    if (message.durationMs > 0) {
+                        Text(
+                            text = formatDuration(message.durationMs),
+                            fontSize = 10.sp,
+                            color = CodexOnSurfaceVariant.copy(alpha = 0.4f)
+                        )
+                        Spacer(Modifier.width(8.dp))
+                    }
+                    // 时间戳
                     Text(
-                        text = formatDuration(message.durationMs),
+                        text = formatTimestamp(message.timestamp),
                         fontSize = 10.sp,
                         color = CodexOnSurfaceVariant.copy(alpha = 0.4f)
                     )
-                    Spacer(Modifier.width(8.dp))
                 }
-                // 时间戳
-                Text(
-                    text = formatTimestamp(message.timestamp),
-                    fontSize = 10.sp,
-                    color = CodexOnSurfaceVariant.copy(alpha = 0.4f)
-                )
             }
         }
 
@@ -487,11 +607,88 @@ private fun CursorStyleMessage(
 }
 
 // ============================================================================
+// User Message Layout (with warm orange vertical line)
+// ============================================================================
+
+/**
+ * 用户消息布局 — 暖橙竖线装饰 + 半透明背景。
+ * 左侧 3dp 宽暖橙竖线（24dp 圆角）+ 内容区域。
+ */
+@Composable
+private fun UserMessageLayout(
+    message: ChatMessage
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 2.dp)
+    ) {
+        // 左侧暖橙竖线装饰（3dp 宽，24dp 圆角）
+        Box(
+            modifier = Modifier
+                .width(3.dp)
+                .height(androidx.compose.ui.unit.Dp.Unspecified)
+                .clip(RoundedCornerShape(24.dp))
+                .background(CodexBrandOrange.copy(alpha = 0.6f))
+        )
+
+        // 内容区域：暖橙半透明背景
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .background(
+                    CodexBrandOrange.copy(alpha = 0.06f),
+                    RoundedCornerShape(topEnd = 6.dp, bottomEnd = 6.dp)
+                )
+                .padding(horizontal = 12.dp, vertical = 8.dp)
+                .animateContentSize()
+        ) {
+            // 角色标签行
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 6.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "You",
+                    fontSize = 11.sp,
+                    fontFamily = FontFamily.SansSerif,
+                    fontWeight = FontWeight.SemiBold,
+                    color = CodexBrandOrange,
+                    letterSpacing = 0.5.sp
+                )
+            }
+
+            // 消息正文
+            if (message.content.isNotBlank()) {
+                MarkdownText(text = message.content)
+            }
+
+            // 时间戳右对齐
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 4.dp),
+                horizontalArrangement = Arrangement.End
+            ) {
+                Text(
+                    text = formatTimestamp(message.timestamp),
+                    fontSize = 10.sp,
+                    color = CodexOnSurfaceVariant.copy(alpha = 0.4f)
+                )
+            }
+        }
+    }
+}
+
+// ============================================================================
 // Streaming Message
 // ============================================================================
 
 /**
- * 流式输出中的消息组件。
+ * 流式输出中的消息组件 — Operit 视觉升级。
  */
 @Composable
 private fun StreamingMessage(
@@ -503,12 +700,12 @@ private fun StreamingMessage(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 4.dp, vertical = 8.dp)
+            .padding(horizontal = 16.dp, vertical = 2.dp)
     ) {
         // 角色标签
         Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.padding(bottom = 6.dp)
+            modifier = Modifier.padding(bottom = 6.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
                 "Response",
@@ -553,8 +750,8 @@ private fun StreamingMessage(
 // ============================================================================
 
 /**
- * 思考过程折叠区域。
- * 带动画展开/收起，暗色背景+小字体。
+ * 思考过程折叠区域 — Operit 视觉升级。
+ * 💭 emoji 标识 + 更深暖炭色背景 + 流式 loading indicator。
  */
 @Composable
 private fun ThinkingSection(
@@ -570,7 +767,7 @@ private fun ThinkingSection(
 
     Surface(
         shape = RoundedCornerShape(8.dp),
-        color = CodexSurfaceVariant.copy(alpha = 0.5f),
+        color = CodexSurfaceVariant.copy(alpha = 0.7f),  // 更深的暖炭色
         modifier = Modifier.fillMaxWidth()
     ) {
         Column(
@@ -587,14 +784,20 @@ private fun ThinkingSection(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    if (isStreaming) "Thinking..." else "Thought process",
+                    if (isStreaming) "💭 Thinking..." else "💭 Thought process",
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Medium,
                     color = CodexOnSurfaceVariant.copy(alpha = 0.7f)
                 )
                 Spacer(Modifier.weight(1f))
                 if (isStreaming) {
-                    LoadingDotsIndicator(modifier = Modifier.size(14.dp))
+                    // 流式时标题旁加小型 loading indicator
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(14.dp),
+                        strokeWidth = 1.5.dp,
+                        color = CodexBrandOrange.copy(alpha = 0.6f),
+                        trackColor = CodexOutline.copy(alpha = 0.2f)
+                    )
                 } else {
                     Icon(
                         if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
@@ -625,8 +828,8 @@ private fun ThinkingSection(
 // ============================================================================
 
 /**
- * 工具调用折叠区域。
- * 显示工具名+耗时+状态，展开后显示输出。
+ * 工具调用折叠区域 — Operit 视觉升级。
+ * 🔧 图标前缀 + 绿色 ✓ / 红色 ✗ 状态 + monospace 参数 + 语法高亮色。
  */
 @Composable
 private fun ToolCallSection(toolCall: ToolCallInfo) {
@@ -650,11 +853,10 @@ private fun ToolCallSection(toolCall: ToolCallInfo) {
                     .padding(horizontal = 12.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Icon(
-                    Icons.Outlined.Build,
-                    contentDescription = "工具",
-                    tint = if (toolCall.isSuccess) CodexAccent else CodexError,
-                    modifier = Modifier.size(14.dp)
+                // 🔧 图标
+                Text(
+                    text = "🔧",
+                    fontSize = 13.sp
                 )
                 Spacer(Modifier.width(6.dp))
                 Text(
@@ -673,11 +875,16 @@ private fun ToolCallSection(toolCall: ToolCallInfo) {
                     )
                 }
                 Spacer(Modifier.weight(1f))
-                // 状态图标
+                // 状态图标 — 成功绿色 ✓，失败红色 ✗
                 Text(
                     if (toolCall.isSuccess) "✓" else "✗",
-                    fontSize = 12.sp,
-                    color = if (toolCall.isSuccess) CodexAccent else CodexError
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = if (toolCall.isSuccess) {
+                        androidx.compose.ui.graphics.Color(0xFF4ADE80)  // Green
+                    } else {
+                        CodexError
+                    }
                 )
                 Spacer(Modifier.width(4.dp))
                 Icon(
@@ -688,27 +895,46 @@ private fun ToolCallSection(toolCall: ToolCallInfo) {
                 )
             }
 
-            // 展开后显示参数和结果
+            // 展开后显示参数和结果（monospace 小字体 + 语法高亮色）
             if (expanded) {
                 // 参数
                 if (toolCall.arguments.isNotBlank()) {
-                    Text(
-                        text = "Args: ${toolCall.arguments.take(500)}",
-                        fontSize = 11.sp,
-                        fontFamily = FontFamily.Monospace,
-                        color = CodexOnSurfaceVariant.copy(alpha = 0.7f),
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp)
-                    )
+                    Surface(
+                        shape = RoundedCornerShape(4.dp),
+                        color = CodexSurface.copy(alpha = 0.5f),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp, vertical = 2.dp)
+                    ) {
+                        Text(
+                            text = toolCall.arguments.take(500),
+                            fontSize = 11.sp,
+                            fontFamily = FontFamily.Monospace,
+                            lineHeight = 15.sp,
+                            color = CodexPrimaryLight.copy(alpha = 0.8f),
+                            modifier = Modifier.padding(6.dp)
+                        )
+                    }
                 }
                 // 结果
                 if (toolCall.result.isNotBlank()) {
-                    Text(
-                        text = "Output: ${toolCall.result.take(800)}${if (toolCall.result.length > 800) "…" else ""}",
-                        fontSize = 11.sp,
-                        fontFamily = FontFamily.Monospace,
-                        color = CodexOnSurfaceVariant.copy(alpha = 0.7f),
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp)
-                    )
+                    val resultText = toolCall.result.take(800) + if (toolCall.result.length > 800) "…" else ""
+                    Surface(
+                        shape = RoundedCornerShape(4.dp),
+                        color = CodexSurface.copy(alpha = 0.5f),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp, vertical = 2.dp)
+                    ) {
+                        Text(
+                            text = resultText,
+                            fontSize = 11.sp,
+                            fontFamily = FontFamily.Monospace,
+                            lineHeight = 15.sp,
+                            color = CodexOnSurfaceVariant.copy(alpha = 0.8f),
+                            modifier = Modifier.padding(6.dp)
+                        )
+                    }
                 }
                 Spacer(Modifier.height(4.dp))
             }
@@ -721,8 +947,9 @@ private fun ToolCallSection(toolCall: ToolCallInfo) {
 // ============================================================================
 
 /**
- * 基础 Markdown 渲染器（不引入外部库）。
- * 支持：代码块（深色背景+复制按钮）、行内代码、粗体、斜体、列表、链接。
+ * 基础 Markdown 渲染器 — Operit 视觉微升级。
+ * 支持：代码块（语言标签暖橙背景色+复制按钮）、行内代码（暖橙半透明背景+小圆角）、
+ * 粗体、斜体、列表（暖橙色圆点）、链接。
  */
 @Composable
 private fun MarkdownText(
@@ -773,7 +1000,8 @@ private fun MarkdownText(
 }
 
 /**
- * 代码块视图：深色背景 + 圆角 + 复制按钮。
+ * 代码块视图 — Operit 视觉升级。
+ * 深色背景 + 圆角 + 语言标签暖橙半透明背景色 + 复制按钮。
  */
 @Composable
 private fun CodeBlockView(
@@ -787,21 +1015,27 @@ private fun CodeBlockView(
         modifier = Modifier.fillMaxWidth()
     ) {
         Column {
-            // 顶部栏：语言标签 + 复制按钮
+            // 顶部栏：语言标签（暖橙半透明背景色）+ 复制按钮
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(CodexOutline.copy(alpha = 0.2f))
-                    .padding(horizontal = 12.dp, vertical = 4.dp),
+                    .padding(horizontal = 8.dp, vertical = 4.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    text = language.ifBlank { "code" },
-                    fontSize = 10.sp,
-                    fontFamily = FontFamily.Monospace,
-                    color = CodexOnSurfaceVariant.copy(alpha = 0.6f)
-                )
+                // 语言标签 — 暖橙半透明背景
+                Surface(
+                    shape = RoundedCornerShape(4.dp),
+                    color = CodexBrandOrange.copy(alpha = 0.15f)
+                ) {
+                    Text(
+                        text = language.ifBlank { "code" },
+                        fontSize = 10.sp,
+                        fontFamily = FontFamily.Monospace,
+                        color = CodexBrandOrange.copy(alpha = 0.8f),
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                    )
+                }
                 IconButton(
                     onClick = { copyToClipboard(context, code) },
                     modifier = Modifier.size(24.dp)
@@ -821,7 +1055,7 @@ private fun CodeBlockView(
                 fontFamily = FontFamily.Monospace,
                 color = CodexOnSurface.copy(alpha = 0.9f),
                 lineHeight = 17.sp,
-                modifier = Modifier.padding(12.dp)
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)
             )
         }
     }
@@ -904,7 +1138,7 @@ private fun parseLine(line: String, builder: AnnotatedString.Builder) {
         Regex("""\[(.+?)\]\((.+?)\)""")
     )
 
-    // 列表处理
+    // 列表处理 — 暖橙色圆点
     val listMatch = Regex("""^(\s*)([-*•]|\d+\.)\s(.*)""").matchEntire(remaining)
     if (listMatch != null) {
         val indent = listMatch.groupValues[1].length
@@ -912,7 +1146,10 @@ private fun parseLine(line: String, builder: AnnotatedString.Builder) {
         val content = listMatch.groupValues[3]
         // 缩进
         repeat(indent / 2) { builder.append("  ") }
-        builder.append("  $bullet ")
+        // 暖橙色圆点替代原始符号
+        builder.withStyle(SpanStyle(color = CodexBrandOrange)) {
+            builder.append("● ")
+        }
         parseInlineContent(content, builder)
         return
     }
@@ -945,6 +1182,7 @@ private fun parseLine(line: String, builder: AnnotatedString.Builder) {
 
 /**
  * 解析行内 Markdown 格式（粗体、斜体、代码、链接）。
+ * 行内代码：暖橙半透明背景 + 小圆角。
  */
 private fun parseInlineContent(text: String, builder: AnnotatedString.Builder) {
     var i = 0
@@ -986,14 +1224,14 @@ private fun parseInlineContent(text: String, builder: AnnotatedString.Builder) {
                     builder.append(text[i]); i++
                 }
             }
-            // 行内代码 `code`
+            // 行内代码 `code` — 暖橙半透明背景 + 小圆角
             text.startsWith("`", i) -> {
                 val end = text.indexOf("`", i + 1)
                 if (end > i) {
                     builder.withStyle(SpanStyle(
                         fontFamily = FontFamily.Monospace,
-                        background = CodexSurfaceVariant.copy(alpha = 0.4f),
-                        color = CodexPrimaryLight
+                        background = CodexBrandOrange.copy(alpha = 0.12f),
+                        color = CodexBrandOrange.copy(alpha = 0.9f)
                     )) {
                         builder.append(" ${text.substring(i + 1, end)} ")
                     }
@@ -1085,14 +1323,17 @@ private fun LoadingDotsIndicator(
 // ============================================================================
 
 /**
- * 升级版输入区域。
- * 圆角输入框 + 品牌色发送按钮 + 红色停止按钮。
+ * 升级版输入区域 — Operit 视觉升级。
+ * 模型选择快捷栏 + 圆角输入框 + 新建对话按钮 + 品牌色发送按钮 + 红色停止按钮。
  */
 @Composable
 private fun ChatInputArea(
     inputText: String,
     onInputTextChange: (String) -> Unit,
     isStreaming: Boolean,
+    currentModel: String,
+    onModelSwitch: () -> Unit,
+    onNewChat: () -> Unit,
     onSend: () -> Unit,
     onStop: () -> Unit
 ) {
@@ -1101,91 +1342,144 @@ private fun ChatInputArea(
         color = CodexSurface.copy(alpha = 0.95f),
         tonalElevation = 3.dp
     ) {
-        // 顶部分隔线
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(1.dp)
-                .background(CodexOutline.copy(alpha = 0.3f))
-        )
-
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 10.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            // 输入框
-            OutlinedTextField(
-                value = inputText,
-                onValueChange = onInputTextChange,
-                modifier = Modifier.weight(1f),
-                placeholder = {
-                    Text(
-                        "发送消息…",
-                        fontSize = 14.sp,
-                        color = CodexOnSurfaceVariant.copy(alpha = 0.4f)
-                    )
-                },
-                shape = RoundedCornerShape(24.dp),
-                maxLines = 4,
-                enabled = !isStreaming,
-                textStyle = TextStyle(
-                    fontSize = 14.sp,
-                    color = CodexOnSurface,
-                    lineHeight = 19.sp
-                ),
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = CodexBrandOrange.copy(alpha = 0.5f),
-                    unfocusedBorderColor = CodexOutline.copy(alpha = 0.3f),
-                    disabledBorderColor = CodexOutline.copy(alpha = 0.15f),
-                    focusedContainerColor = CodexSurfaceVariant.copy(alpha = 0.3f),
-                    unfocusedContainerColor = CodexSurfaceVariant.copy(alpha = 0.15f),
-                    disabledContainerColor = CodexSurfaceVariant.copy(alpha = 0.08f),
-                    cursorColor = CodexBrandOrange
-                )
+        Column {
+            // 顶部分隔线
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(1.dp)
+                    .background(CodexOutline.copy(alpha = 0.3f))
             )
 
-            Spacer(Modifier.width(8.dp))
+            // 模型选择快捷栏
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp, vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // 模型芯片
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = CodexBrandOrange.copy(alpha = 0.1f),
+                    modifier = Modifier.clickable(onClick = onModelSwitch)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(6.dp)
+                                .clip(CircleShape)
+                                .background(CodexBrandOrange)
+                        )
+                        Spacer(Modifier.width(6.dp))
+                        Text(
+                            text = currentModel,
+                            fontSize = 11.sp,
+                            fontFamily = FontFamily.Monospace,
+                            color = CodexBrandOrange.copy(alpha = 0.9f),
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+                }
 
-            // 发送/停止按钮
-            if (isStreaming) {
-                // 停止按钮 - 红色调圆形
+                Spacer(Modifier.weight(1f))
+
+                // 新建对话按钮
                 IconButton(
-                    onClick = onStop,
-                    modifier = Modifier
-                        .size(40.dp)
-                        .clip(CircleShape)
-                        .background(CodexError.copy(alpha = 0.15f))
+                    onClick = onNewChat,
+                    modifier = Modifier.size(28.dp)
                 ) {
                     Icon(
-                        Icons.Default.Stop,
-                        contentDescription = "停止",
-                        tint = CodexError,
-                        modifier = Modifier.size(20.dp)
+                        Icons.Default.Add,
+                        contentDescription = "新建对话",
+                        tint = CodexOnSurfaceVariant.copy(alpha = 0.6f),
+                        modifier = Modifier.size(16.dp)
                     )
                 }
-            } else {
-                // 发送按钮 - 品牌色圆形
-                val hasContent = inputText.isNotBlank()
-                IconButton(
-                    onClick = onSend,
-                    enabled = hasContent,
-                    modifier = Modifier
-                        .size(40.dp)
-                        .clip(CircleShape)
-                        .background(
-                            if (hasContent) CodexBrandOrange
-                            else CodexOutline.copy(alpha = 0.2f)
+            }
+
+            // 输入行
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // 输入框
+                OutlinedTextField(
+                    value = inputText,
+                    onValueChange = onInputTextChange,
+                    modifier = Modifier.weight(1f),
+                    placeholder = {
+                        Text(
+                            "Ask Codex...",
+                            fontSize = 14.sp,
+                            color = CodexOnSurfaceVariant.copy(alpha = 0.4f)
                         )
-                ) {
-                    Icon(
-                        Icons.Default.Send,
-                        contentDescription = "发送",
-                        tint = if (hasContent) androidx.compose.ui.graphics.Color.White
-                               else CodexOnSurfaceVariant.copy(alpha = 0.3f),
-                        modifier = Modifier.size(18.dp)
+                    },
+                    shape = RoundedCornerShape(24.dp),
+                    maxLines = 4,
+                    enabled = !isStreaming,
+                    textStyle = TextStyle(
+                        fontSize = 14.sp,
+                        color = CodexOnSurface,
+                        lineHeight = 19.sp
+                    ),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = CodexBrandOrange.copy(alpha = 0.5f),
+                        unfocusedBorderColor = CodexOutline.copy(alpha = 0.3f),
+                        disabledBorderColor = CodexOutline.copy(alpha = 0.15f),
+                        focusedContainerColor = CodexSurfaceVariant.copy(alpha = 0.3f),
+                        unfocusedContainerColor = CodexSurfaceVariant.copy(alpha = 0.15f),
+                        disabledContainerColor = CodexSurfaceVariant.copy(alpha = 0.08f),
+                        cursorColor = CodexBrandOrange
                     )
+                )
+
+                Spacer(Modifier.width(8.dp))
+
+                // 发送/停止按钮
+                if (isStreaming) {
+                    // 停止按钮 - 红色调圆形
+                    IconButton(
+                        onClick = onStop,
+                        modifier = Modifier
+                            .size(40.dp)
+                            .clip(CircleShape)
+                            .background(CodexError.copy(alpha = 0.15f))
+                    ) {
+                        Icon(
+                            Icons.Default.Stop,
+                            contentDescription = "停止",
+                            tint = CodexError,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                } else {
+                    // 发送按钮 - 品牌色圆形
+                    val hasContent = inputText.isNotBlank()
+                    IconButton(
+                        onClick = onSend,
+                        enabled = hasContent,
+                        modifier = Modifier
+                            .size(40.dp)
+                            .clip(CircleShape)
+                            .background(
+                                if (hasContent) CodexBrandOrange
+                                else CodexOutline.copy(alpha = 0.2f)
+                            )
+                    ) {
+                        Icon(
+                            Icons.Default.Send,
+                            contentDescription = "发送",
+                            tint = if (hasContent) androidx.compose.ui.graphics.Color.White
+                                   else CodexOnSurfaceVariant.copy(alpha = 0.3f),
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
                 }
             }
         }
