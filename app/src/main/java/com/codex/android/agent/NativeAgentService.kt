@@ -547,58 +547,57 @@ class NativeAgentService(private val context: Context) {
         val envInfo = runCatching { devEnv.getSelfContainedLinuxInfo() }.getOrNull()
         val hasProot = envInfo?.state == com.codex.android.util.LinuxEnvironment.EngineState.READY
 
-        // 检测已安装的工具
-        val installedTools = runCatching {
-            val linuxEnv = com.codex.android.util.LinuxEnvironment(context)
-            if (linuxEnv.isInstalled()) {
-                val prootEnv = com.codex.android.environment.ProotEnvironment(context)
-                val categories = com.codex.android.environment.ProotEnvironment.TOOL_CATEGORIES
-                val available = mutableListOf<String>()
-                // 从 SharedPreferences 读取已安装工具列表
-                val prefs = context.getSharedPreferences("codex_setup_prefs", android.content.Context.MODE_PRIVATE)
-                val installedSet = prefs.getStringSet("installed_tools", emptySet()) ?: emptySet()
-                installedSet.forEach { available.add(it) }
-                available
-            } else emptyList()
-        }.getOrDefault(emptyList())
+        // 读取已安装工具列表
+        val prefs = context.getSharedPreferences("codex_setup_prefs", android.content.Context.MODE_PRIVATE)
+        val installedTools = prefs.getStringSet("installed_tools", emptySet()) ?: emptySet()
 
-        val envSection = if (hasProot) {
-            """
-Linux 环境：✅ Ubuntu proot 已就绪
-- 可用命令：apt-get, python3, pip3, node, npm, git, vim, curl, wget, gcc, make 等
-- 已安装工具：${if (installedTools.isNotEmpty()) installedTools.joinToString(", ") else "通过 apt-get install 按需安装"}
-- 使用 shell 工具时，Linux 命令会自动通过 proot 执行
-- 可直接执行：python3 script.py、npm install、git clone、gcc main.c 等
-"""
+        // 构建环境信息
+        val envInfoText = if (hasProot) {
+            val toolsList = if (installedTools.isNotEmpty()) installedTools.joinToString(", ") else "通过 apt-get install 按需安装"
+            "Linux 环境: Ubuntu proot 已就绪\n" +
+            "- 可用命令: apt-get, python3, pip3, node, npm, git, vim, curl, wget, gcc, make 等\n" +
+            "- 已安装工具: $toolsList\n" +
+            "- shell 工具会自动通过 proot 执行 Linux 命令\n" +
+            "- 可直接执行: python3 script.py, npm install, git clone, gcc main.c 等"
         } else {
-            """
-Linux 环境：❌ 未安装（仅 Android Shell 可用）
-- 只能使用 Android 基础命令（ls, cat, grep, find, cp, mv 等）
-- 如需完整开发工具链，请引导用户到「设置 → 环境」安装 Ubuntu proot
-"""
+            "Linux 环境: 未安装（仅 Android Shell 可用）\n" +
+            "- 只能使用基础命令: ls, cat, grep, find, cp, mv 等\n" +
+            "- 如需完整开发工具链，请引导用户安装 Ubuntu proot"
         }
 
-        val toolList = toolRegistry.keys.joinToString("
-- ", prefix = "- ")
+        // 构建工具列表
+        val toolListText = toolRegistry.keys.joinToString(separator = "\n- ", prefix = "- ")
 
-        return """你是一个运行在 Android 设备上的 AI 编程助手（Codex Agent）。
-你可以执行 Shell 命令、读写文件、搜索代码来帮助用户完成编程任务。
+        // 构建执行策略
+        val strategyText = if (hasProot) {
+            "- 优先使用 proot Linux 环境执行开发相关命令"
+        } else {
+            "- 当前仅 Android Shell，避免使用 Linux 特有命令"
+        }
 
-当前环境信息：
-- 设备: Android ${android.os.Build.VERSION.RELEASE} (API ${android.os.Build.VERSION.SDK_INT})
-- 架构: ${android.os.Build.SUPPORTED_ABIS?.firstOrNull() ?: "unknown"}
-- 工作目录: ${context.filesDir.absolutePath}
-$envSection
-可用工具：
-$toolList
-
-执行策略：
-${if (hasProot) "- 优先使用 proot Linux 环境执行开发相关命令" else "- 当前仅 Android Shell，避免使用 Linux 特有命令"}
-- file_read/file_write 用于精确的文件操作，shell 用于批量操作
-- search 用于查找文件和代码内容
-- 危险命令（rm -rf、dd 等）执行前需提醒用户
-
-请用中文回复。"""
+        return buildString {
+            appendLine("你是一个运行在 Android 设备上的 AI 编程助手（Codex Agent）。")
+            appendLine("你可以执行 Shell 命令、读写文件、搜索代码来帮助用户完成编程任务。")
+            appendLine()
+            appendLine("当前环境信息：")
+            appendLine("- 设备: Android ${android.os.Build.VERSION.RELEASE} (API ${android.os.Build.VERSION.SDK_INT})")
+            appendLine("- 架构: ${android.os.Build.SUPPORTED_ABIS?.firstOrNull() ?: "unknown"}")
+            appendLine("- 工作目录: ${context.filesDir.absolutePath}")
+            appendLine(envInfoText)
+            appendLine()
+            appendLine("可用工具：")
+            appendLine(toolListText)
+            appendLine()
+            appendLine("执行策略：")
+            appendLine(strategyText)
+            appendLine("- file_read/file_write 用于精确的文件操作，shell 用于批量操作")
+            appendLine("- search 用于查找文件和代码内容")
+            appendLine("- proot_env 用于查询和管理 Linux 环境")
+            appendLine("- 危险命令（rm -rf、dd 等）执行前需提醒用户")
+            appendLine()
+            append("请用中文回复。")
+        }
+    }
     }
 
     /** 工具调用累积器 */
