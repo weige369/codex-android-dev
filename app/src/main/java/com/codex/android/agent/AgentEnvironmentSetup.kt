@@ -284,7 +284,7 @@ class AgentEnvironmentSetup(private val context: Context) {
     /**
      * 配置环境：npm 镜像、pip 镜像等。
      */
-    private fun configureEnvironment() {
+    private suspend fun configureEnvironment() {
         try {
             // npm 使用国内镜像
             linuxEnv.runCommand(
