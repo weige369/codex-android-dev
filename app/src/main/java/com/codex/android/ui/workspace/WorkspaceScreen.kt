@@ -38,6 +38,9 @@ import com.codex.android.ui.components.AgentStatusBar
 import com.codex.android.ui.theme.*
 import com.codex.android.ui.workspace.NativeChatView
 import com.codex.android.agent.NativeAgentService
+import com.codex.android.agent.ProotAgentService
+import com.codex.android.agent.ChatAgent
+import com.codex.android.agent.AgentOrchestrator
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -102,9 +105,17 @@ fun WorkspaceScreen(
             // Native API mode: use Compose chat interface instead of WebView
             val ctx = LocalContext.current
             val nativeAgent = remember(ctx) { NativeAgentService.getInstance(ctx) }
+            val prootAgent = remember(ctx) { ProotAgentService.getInstance(ctx) }
+            // Agent mode selection: proot agent when available, fallback to native
+            val selectedAgentType = remember { mutableStateOf(AgentOrchestrator.AgentType.NATIVE) }
+            val chatAgent: ChatAgent = if (selectedAgentType.value != AgentOrchestrator.AgentType.NATIVE && prootAgent.isProotReady()) {
+                prootAgent.also { it.selectAgent(selectedAgentType.value) }
+            } else {
+                nativeAgent
+            }
             if (runtimeState == RuntimeState.NATIVE_MODE) {
                 NativeChatView(
-                    agent = nativeAgent,
+                    agent = chatAgent,
                     modifier = Modifier.fillMaxSize()
                 )
             } else {
