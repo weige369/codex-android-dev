@@ -151,7 +151,7 @@ class AgentOrchestrator(private val context: Context) {
                 type = AgentType.CODEX,
                 process = process,
                 state = AgentState.RUNNING,
-                pid = process?.pid ?: -1,
+                pid = getProcessPid(process),
                 workingDir = workDir
             )
 
@@ -159,7 +159,7 @@ class AgentOrchestrator(private val context: Context) {
             process?.let { startOutputMonitor(AgentType.CODEX, it) }
             _agentState.value = AgentState.RUNNING
 
-            Log.i(TAG, "Codex Agent 已启动 (PID: ${process?.pid})")
+            Log.i(TAG, "Codex Agent 已启动 (PID: ${getProcessPid(process)})")
             true
         } catch (e: Exception) {
             Log.e(TAG, "启动 Codex Agent 失败", e)
@@ -192,14 +192,14 @@ class AgentOrchestrator(private val context: Context) {
                 type = AgentType.OPENCODE,
                 process = process,
                 state = AgentState.RUNNING,
-                pid = process?.pid ?: -1,
+                pid = getProcessPid(process),
                 workingDir = workDir
             )
 
             process?.let { startOutputMonitor(AgentType.OPENCODE, it) }
             _agentState.value = AgentState.RUNNING
 
-            Log.i(TAG, "OpenCode Agent 已启动 (PID: ${process?.pid})")
+            Log.i(TAG, "OpenCode Agent 已启动 (PID: ${getProcessPid(process)})")
             true
         } catch (e: Exception) {
             Log.e(TAG, "启动 OpenCode Agent 失败", e)
@@ -235,14 +235,14 @@ class AgentOrchestrator(private val context: Context) {
                 type = AgentType.OPENMANUS,
                 process = process,
                 state = AgentState.RUNNING,
-                pid = process?.pid ?: -1,
+                pid = getProcessPid(process),
                 workingDir = manusDir
             )
 
             process?.let { startOutputMonitor(AgentType.OPENMANUS, it) }
             _agentState.value = AgentState.RUNNING
 
-            Log.i(TAG, "OpenManus Agent 已启动 (PID: ${process?.pid})")
+            Log.i(TAG, "OpenManus Agent 已启动 (PID: ${getProcessPid(process)})")
             true
         } catch (e: Exception) {
             Log.e(TAG, "启动 OpenManus Agent 失败", e)
@@ -447,5 +447,16 @@ class AgentOrchestrator(private val context: Context) {
     fun destroy() {
         stopAll()
         scope.cancel()
+    }
+
+    private fun getProcessPid(process: Process?): Int {
+        if (process == null) return -1
+        return try {
+            val field = process.javaClass.getDeclaredField("pid")
+            field.isAccessible = true
+            field.getInt(process)
+        } catch (_: Exception) {
+            -1
+        }
     }
 }
