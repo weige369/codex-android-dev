@@ -598,7 +598,6 @@ class NativeAgentService(private val context: Context) {
             append("请用中文回复。")
         }
     }
-    }
 
     /** 工具调用累积器 */
     private class ToolCallAccumulator {
