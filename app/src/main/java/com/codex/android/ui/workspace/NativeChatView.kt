@@ -83,6 +83,7 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.codex.android.agent.ChatAgent
+import com.codex.android.agent.NativeAgentService
 import com.codex.android.agent.AgentConnectionState
 import com.codex.android.ui.theme.CodexBrandOrange
 import com.codex.android.ui.theme.CodexCodeBg
@@ -163,7 +164,7 @@ fun NativeChatView(
     val currentToolCalls = remember { mutableStateListOf<ToolCallInfo>() }
 
     // 模型选择状态
-    val currentModelName = remember(ctx) { NativeAgentService.getInstance(ctx).getApiModel() }
+    val currentModelName = remember(context) { NativeAgentService.getInstance(context).getApiModel() }
     
 
     // 长按菜单状态
@@ -315,7 +316,7 @@ fun NativeChatView(
             isStreaming = isStreaming,
             currentModel = currentModelName,
             onModelSwitch = {
-                val intent = android.content.Intent(ctx, com.codex.android.ui.CodexActivity::class.java).apply { putExtra("navigate_to", "api_provider") }; ctx.startActivity(intent)
+                val intent = android.content.Intent(context, com.codex.android.ui.CodexActivity::class.java).apply { putExtra("navigate_to", "api_provider") }; context.startActivity(intent)
             },
             onNewChat = {
                 messages.clear()
