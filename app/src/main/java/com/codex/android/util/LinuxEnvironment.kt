@@ -60,16 +60,16 @@ class LinuxEnvironment(private val context: Context) {
 
         // 各发行版元信息
         private val DISTRO_META = mapOf(
-            "ubuntu" to DistroMeta("Ubuntu 24.04 LTS", "ubuntu-base.tar.gz", ROOTFS_MIRRORS, expectedSha256 = "PLACEHOLDER_UBUNTU_SHA256"),
-            "alpine" to DistroMeta("Alpine 3.19 (轻量)", "alpine-minirootfs.tar.gz", ALPINE_ROOTFS_MIRRORS, expectedSha256 = "PLACEHOLDER_ALPINE_SHA256"),
-            "debian" to DistroMeta("Debian 12", "debian-base.tar.xz", DEBIAN_ROOTFS_MIRRORS, expectedSha256 = "PLACEHOLDER_DEBIAN_SHA256")
+            "ubuntu" to DistroMeta("Ubuntu 24.04 LTS", "ubuntu-base.tar.gz", ROOTFS_MIRRORS, expectedSha256 = "04207713ece899c3740823d33690441ad3a7f0ded1101aca744e2b0f37ac7ff2"),
+            "alpine" to DistroMeta("Alpine 3.19 (轻量)", "alpine-minirootfs.tar.gz", ALPINE_ROOTFS_MIRRORS, expectedSha256 = "7ef5eef3a5b1d198dfb1610cde1ef5b0755ff5d838fb1e5e1b9f42b59214820f"),
+            "debian" to DistroMeta("Debian 12", "debian-base.tar.xz", DEBIAN_ROOTFS_MIRRORS, expectedSha256 = "4baa32280cc70b67e2c650777c1d974349f0cdf23afaabc305ad3bc6182b8df8")
         )
 
         data class DistroMeta(
             val displayName: String,
             val archiveName: String,
             val mirrors: List<String>,
-            val expectedSha256: String = ""  // placeholder, to be updated with real hashes
+            val expectedSha256: String = ""  // SHA256 hash for download integrity verification
         )
 
         private const val CONNECT_TIMEOUT_MS = 10_000
