@@ -504,8 +504,8 @@ class CodexManager(private val context: Context) {
 # Codex Android Configuration
 model = "gpt-4o"
 provider = "openai"
-approval = "never"
-sandbox = "off"
+approval = "author"
+sandbox = "filesystem"
 skip-git-repo-check = true
 experimental_features = true
 
