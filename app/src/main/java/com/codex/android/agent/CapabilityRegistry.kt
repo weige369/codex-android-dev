@@ -36,6 +36,7 @@ class CapabilityRegistry(private val context: Context) {
             ::ShellDevice,
             ::FileReadDevice,
             ::FileWriteDevice,
+            ::FileSystemDevice,
             ::SearchDevice,
             ::ProotEnvDevice,
             ::LinuxShellDevice
