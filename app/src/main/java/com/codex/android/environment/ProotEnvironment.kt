@@ -237,11 +237,9 @@ class ProotEnvironment(private val context: Context) {
         mirror: String,
         onProgress: (InstallProgress) -> Unit
     ): Boolean {
-        // Alpine 暂时回退到 Ubuntu 安装逻辑（需要单独的 rootfs 下载实现）
-        // 未来可扩展 Alpine minirootfs 下载
-        onProgress(InstallProgress(InstallPhase.DOWNLOADING, 0.1f, "正在下载 Alpine rootfs..."))
-        // 复用 Ubuntu 安装（Alpine 支持作为后续增强）
+        onProgress(InstallProgress(InstallPhase.DOWNLOADING, 0.1f, "正在下载 Alpine minirootfs (~5MB)..."))
         val ok = linuxEnv.installRootfs(
+            distro = "alpine",
             onProgress = { read, total ->
                 val pct = if (total > 0) (read.toFloat() / total) * 0.6f + 0.1f else 0.3f
                 onProgress(InstallProgress(InstallPhase.DOWNLOADING, pct.coerceAtMost(0.7f),
@@ -268,9 +266,9 @@ class ProotEnvironment(private val context: Context) {
         mirror: String,
         onProgress: (InstallProgress) -> Unit
     ): Boolean {
-        // Debian 暂时复用 Ubuntu rootfs（Debian 支持作为后续增强）
         onProgress(InstallProgress(InstallPhase.DOWNLOADING, 0.1f, "正在下载 Debian rootfs..."))
         val ok = linuxEnv.installRootfs(
+            distro = "debian",
             onProgress = { read, total ->
                 val pct = if (total > 0) (read.toFloat() / total) * 0.6f + 0.1f else 0.3f
                 onProgress(InstallProgress(InstallPhase.DOWNLOADING, pct.coerceAtMost(0.7f),
