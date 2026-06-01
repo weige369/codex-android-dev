@@ -13,6 +13,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.suspendCancellableCoroutine
 
 /**
  * 工具权限管理器。
@@ -209,9 +210,9 @@ class ToolPermissionManager private constructor(private val context: Context) {
                     suspendCancellableCoroutine { continuation ->
                         pendingResult = { decision ->
                             when (decision) {
-                                PermissionDecision.ALLOW -> continuation.resume(true) {}
-                                PermissionDecision.FORBID -> continuation.resume(false) {}
-                                PermissionDecision.ASK -> continuation.resume(false) {}
+                                PermissionDecision.ALLOW -> continuation.resume(true)
+                                PermissionDecision.FORBID -> continuation.resume(false)
+                                PermissionDecision.ASK -> continuation.resume(false)
                             }
                         }
                     }
