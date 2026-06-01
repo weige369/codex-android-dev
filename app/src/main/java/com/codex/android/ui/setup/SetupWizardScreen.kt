@@ -72,8 +72,8 @@ fun SetupWizardScreen(
     val selectedDistro by viewModel.selectedDistro.collectAsState()
     val selectedMirror by viewModel.selectedMirror.collectAsState()
     val linuxInstallState by viewModel.linuxInstallState.collectAsState()
-    val selectedTools by viewModel.selectedTools.collectAsState()
-    val toolsInstallState by viewModel.toolsInstallState.collectAsState()
+    val selectedAgents by viewModel.selectedAgents.collectAsState()
+    val agentInstallState by viewModel.agentInstallState.collectAsState()
     val selectedProvider by viewModel.selectedProvider.collectAsState()
     val apiKey by viewModel.apiKey.collectAsState()
     val customApiUrl by viewModel.customApiUrl.collectAsState()
@@ -87,8 +87,8 @@ fun SetupWizardScreen(
     }
 
     // 工具安装完成后自动跳转到下一步（AI配置）
-    LaunchedEffect(toolsInstallState.isCompleted) {
-        if (toolsInstallState.isCompleted && currentStep == 3) {
+    LaunchedEffect(agentInstallState.isCompleted) {
+        if (agentInstallState.isCompleted && currentStep == 3) {
             kotlinx.coroutines.delay(800)
             viewModel.nextStep()
         }
@@ -201,14 +201,14 @@ fun SetupWizardScreen(
                             onInstall = { viewModel.installLinux(context) },
                             onSkip = { viewModel.skipLinuxInstall() }
                         )
-                        3 -> DevToolsStep(
-                            selectedTools = selectedTools,
-                            installState = toolsInstallState,
-                            onToggleTool = { viewModel.toggleTool(it) },
-                            onSelectAll = { viewModel.selectAllTools() },
-                            onClearAll = { viewModel.clearAllTools() },
-                            onInstall = { viewModel.installSelectedTools(context) },
-                            estimatedSize = viewModel.estimateToolsSize()
+                        3 -> AgentSetupStep(
+                            selectedAgents = selectedAgents,
+                            installState = agentInstallState,
+                            onToggleAgent = { viewModel.toggleAgent(it) },
+                            onSelectAll = { viewModel.selectAllAgents() },
+                            onClearAll = { viewModel.clearAllAgents() },
+                            onInstall = { viewModel.installSelectedAgents(context) },
+                            estimatedSize = viewModel.estimateAgentSize()
                         )
                         4 -> AIConfigStep(
                             selectedProvider = selectedProvider,
@@ -226,7 +226,7 @@ fun SetupWizardScreen(
                         5 -> FinishStep(
                             permissionStates = permissionStates,
                             linuxInstallState = linuxInstallState,
-                            selectedTools = selectedTools,
+                            selectedAgents = selectedAgents,
                             selectedProvider = selectedProvider,
                             providers = viewModel.aiProviders
                         )
@@ -971,12 +971,12 @@ private fun DistroCard(
     }
 }
 
-// ===== 第4步：开发工具 =====
+// ===== 第4步：Agent 选择与安装 =====
 @Composable
-private fun DevToolsStep(
-    selectedTools: Set<String>,
-    installState: SetupWizardViewModel.ToolsInstallState,
-    onToggleTool: (String) -> Unit,
+private fun AgentSetupStep(
+    selectedAgents: Set<AgentOrchestrator.AgentType>,
+    installState: SetupWizardViewModel.AgentInstallState,
+    onToggleAgent: (AgentOrchestrator.AgentType) -> Unit,
     onSelectAll: () -> Unit,
     onClearAll: () -> Unit,
     onInstall: () -> Unit,
@@ -989,7 +989,7 @@ private fun DevToolsStep(
         Spacer(Modifier.height(8.dp))
 
         Icon(
-            Icons.Default.Build,
+            Icons.Default.Psychology,
             contentDescription = null,
             modifier = Modifier.size(56.dp),
             tint = CodexPrimary
@@ -998,13 +998,13 @@ private fun DevToolsStep(
         Spacer(Modifier.height(12.dp))
 
         Text(
-            "开发工具",
+            "选择 AI Agent",
             fontSize = 22.sp,
             fontWeight = FontWeight.Bold
         )
 
         Text(
-            "选择需要安装的编程工具和运行时",
+            "选择要安装的 AI Agent 及其运行环境",
             fontSize = 13.sp,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Center
@@ -1012,14 +1012,14 @@ private fun DevToolsStep(
 
         Spacer(Modifier.height(12.dp))
 
-        // 全选/取消 + 已选计数
+        // 已选计数 + 全选/取消
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
-                "已选 ${selectedTools.size} 项 · 预计 ${estimatedSize}",
+                "已选 ${selectedAgents.size} 个 · 预计 ${estimatedSize}",
                 fontSize = 12.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -1035,42 +1035,42 @@ private fun DevToolsStep(
 
         Spacer(Modifier.height(8.dp))
 
-        // 分类工具列表
-        ProotEnvironment.TOOL_CATEGORIES.forEach { category ->
-            // 分类标题
+        // Agent 选项列表
+        SetupWizardViewModel().agentOptions.forEach { option ->
+            AgentOptionCard(
+                option = option,
+                isSelected = option.type in selectedAgents,
+                onToggle = { onToggleAgent(option.type) },
+                isEnabled = !installState.isInstalling
+            )
+            Spacer(Modifier.height(8.dp))
+        }
+
+        // 提示：基础系统工具已随 Linux 环境预装
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(
+                containerColor = CodexPrimary.copy(alpha = 0.06f)
+            ),
+            shape = RoundedCornerShape(10.dp)
+        ) {
             Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 6.dp),
+                modifier = Modifier.padding(12.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(category.icon, fontSize = 16.sp)
-                Spacer(Modifier.width(6.dp))
+                Icon(Icons.Default.CheckCircle, null, tint = CodexPrimary, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(8.dp))
                 Text(
-                    category.name,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 14.sp,
-                    color = CodexPrimary
+                    "基础工具（git/curl/wget/vim）已随 Linux 环境预装",
+                    fontSize = 11.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
-
-            // 工具项
-            category.tools.forEach { tool ->
-                ToolItem(
-                    tool = tool,
-                    isSelected = tool.packageName in selectedTools,
-                    onToggle = { onToggleTool(tool.packageName) },
-                    isEnabled = !installState.isInstalling
-                )
-                Spacer(Modifier.height(4.dp))
-            }
-
-            Spacer(Modifier.height(4.dp))
         }
 
         Spacer(Modifier.height(8.dp))
 
-        // 安装按钮 / 进度
+        // 安装按钮 / 进度 / 完成
         if (installState.isInstalling) {
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -1080,7 +1080,13 @@ private fun DevToolsStep(
                 shape = RoundedCornerShape(12.dp)
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
-                    Text(installState.message, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                    Text(
+                        "正在安装: ${installState.currentAgent}",
+                        fontWeight = FontWeight.Medium,
+                        fontSize = 14.sp
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    Text(installState.message, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Spacer(Modifier.height(8.dp))
                     LinearProgressIndicator(
                         progress = { installState.progress },
@@ -1107,7 +1113,7 @@ private fun DevToolsStep(
                 ) {
                     Icon(Icons.Default.CheckCircle, null, tint = Color(0xFF2ED573), modifier = Modifier.size(24.dp))
                     Spacer(Modifier.width(8.dp))
-                    Text("工具安装完成!", fontWeight = FontWeight.Bold, color = Color(0xFF2ED573))
+                    Text("Agent 安装完成!", fontWeight = FontWeight.Bold, color = Color(0xFF2ED573))
                     Spacer(Modifier.width(8.dp))
                     Text("即将进入下一步...", fontSize = 12.sp, color = Color(0xFF2ED573).copy(alpha = 0.7f))
                 }
@@ -1115,7 +1121,7 @@ private fun DevToolsStep(
         } else {
             Button(
                 onClick = onInstall,
-                enabled = selectedTools.isNotEmpty(),
+                enabled = selectedAgents.isNotEmpty(),
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(48.dp),
@@ -1128,7 +1134,7 @@ private fun DevToolsStep(
                 Icon(Icons.Default.Download, null, modifier = Modifier.size(20.dp))
                 Spacer(Modifier.width(8.dp))
                 Text(
-                    if (selectedTools.isEmpty()) "请选择工具" else "安装选中工具 (${selectedTools.size})",
+                    if (selectedAgents.isEmpty()) "请选择 Agent" else "安装选中 Agent (${selectedAgents.size})",
                     fontSize = 15.sp,
                     fontWeight = FontWeight.Bold
                 )
@@ -1147,8 +1153,67 @@ private fun DevToolsStep(
 }
 
 @Composable
-private fun ToolItem(
-    tool: ProotEnvironment.ToolInfo,
+private fun AgentOptionCard(
+    option: SetupWizardViewModel.AgentOption,
+    isSelected: Boolean,
+    onToggle: () -> Unit,
+    isEnabled: Boolean
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(enabled = isEnabled, onClick = onToggle),
+        colors = CardDefaults.cardColors(
+            containerColor = if (isSelected)
+                CodexPrimary.copy(alpha = 0.1f)
+            else
+                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+        ),
+        shape = RoundedCornerShape(12.dp),
+        border = if (isSelected) CardDefaults.outlinedCardBorder() else null
+    ) {
+        Row(
+            modifier = Modifier.padding(14.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Checkbox(
+                checked = isSelected,
+                onCheckedChange = { if (isEnabled) onToggle() },
+                colors = CheckboxDefaults.colors(checkedColor = CodexPrimary)
+            )
+            Spacer(Modifier.width(4.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(option.displayName, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                Text(option.description, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                // 依赖标签
+                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    if (option.requiresNodejs) {
+                        Text(
+                            "需 Node.js",
+                            fontSize = 9.sp,
+                            color = CodexPrimary,
+                            modifier = Modifier
+                                .background(CodexPrimary.copy(alpha = 0.1f), RoundedCornerShape(3.dp))
+                                .padding(horizontal = 5.dp, vertical = 1.dp)
+                        )
+                    }
+                    if (option.requiresPython) {
+                        Text(
+                            "需 Python",
+                            fontSize = 9.sp,
+                            color = Color(0xFF3742FA),
+                            modifier = Modifier
+                                .background(Color(0xFF3742FA).copy(alpha = 0.1f), RoundedCornerShape(3.dp))
+                                .padding(horizontal = 5.dp, vertical = 1.dp)
+                        )
+                    }
+                }
+            }
+            Text(option.estimatedSize, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+}
+
     isSelected: Boolean,
     onToggle: () -> Unit,
     isEnabled: Boolean
@@ -1218,7 +1283,7 @@ private fun AIConfigStep(
         Spacer(Modifier.height(8.dp))
 
         Icon(
-            Icons.Default.SmartToy,
+            Icons.Default.Psychology,
             contentDescription = null,
             modifier = Modifier.size(56.dp),
             tint = CodexPrimary
@@ -1429,7 +1494,7 @@ private fun ProviderCard(
 private fun FinishStep(
     permissionStates: SetupWizardViewModel.PermissionStates,
     linuxInstallState: SetupWizardViewModel.LinuxInstallState,
-    selectedTools: Set<String>,
+    selectedAgents: Set<AgentOrchestrator.AgentType>,
     selectedProvider: String,
     providers: List<SetupWizardViewModel.AIProvider>
 ) {
@@ -1520,10 +1585,10 @@ private fun FinishStep(
 
                 // 工具
                 SummaryRow(
-                    icon = Icons.Default.Build,
-                    label = "开发工具",
-                    value = "${selectedTools.size} 项已选",
-                    isDone = selectedTools.isNotEmpty()
+                    icon = Icons.Default.Psychology,
+                    label = "AI Agent",
+                    value = if (selectedAgents.isNotEmpty()) "${selectedAgents.size} 个已安装" else "未选择",
+                    isDone = selectedAgents.isNotEmpty()
                 )
 
                 Spacer(Modifier.height(8.dp))
@@ -1531,7 +1596,7 @@ private fun FinishStep(
                 // AI
                 val providerName = providers.find { it.id == selectedProvider }?.displayName ?: "未配置"
                 SummaryRow(
-                    icon = Icons.Default.SmartToy,
+                    icon = Icons.Default.Psychology,
                     label = "AI 提供商",
                     value = providerName,
                     isDone = selectedProvider.isNotEmpty()
