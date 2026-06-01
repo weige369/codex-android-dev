@@ -126,14 +126,6 @@
         </service>
 
         <!-- Termux Command Result Service -->
-        <service
-            android:name="com.ai.assistance.operit.services.TermuxCommandResultService"
-            android:enabled="true"
-            android:exported="true">
-            <intent-filter>
-                <action android:name="com.termux.shared.RESULT" />
-            </intent-filter>
-        </service>
 
         <!-- DocumentsProvider for File Access -->
         <provider
@@ -158,13 +150,6 @@
         </provider>
 
         <!-- Shower Binder Receiver -->
-        <receiver
-            android:name="com.ai.assistance.operit.core.tools.agent.ShowerBinderReceiver"
-            android:exported="true">
-            <intent-filter>
-                <action android:name="com.codex.android.action.SHOWER_BINDER_READY" />
-            </intent-filter>
-        </receiver>
 
         <!-- FileProvider for sharing workspace files -->
         <provider
