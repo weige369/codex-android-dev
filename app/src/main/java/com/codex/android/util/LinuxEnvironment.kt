@@ -10,6 +10,7 @@ import java.io.FileOutputStream
 import java.net.HttpURLConnection
 import java.net.URL
 import java.util.zip.GZIPInputStream
+import org.apache.commons.compress.compressors.xz.XZCompressorInputStream
 import org.apache.commons.compress.archivers.tar.TarArchiveEntry
 import org.apache.commons.compress.archivers.tar.TarArchiveInputStream
 
@@ -51,17 +52,17 @@ class LinuxEnvironment(private val context: Context) {
             "https://dl-cdn.alpinelinux.org/alpine/v3.19/releases/aarch64/alpine-minirootfs-3.19.1-aarch64.tar.gz"
         )
 
-        // Debian rootfs — 使用 debootstrap 风格的最小 tarball（非 ISO）
+        // Debian rootfs — proot-distro 预构建 tarball（tar.xz 格式）
         private val DEBIAN_ROOTFS_MIRRORS = listOf(
-            "https://mirrors.tuna.tsinghua.edu.cn/debian-cd/current/arm64/iso-cd/debian-12.5.0-arm64-netinst.iso",
-            "https://mirrors.aliyun.com/debian-cd/current/arm64/iso-cd/debian-12.5.0-arm64-netinst.iso"
+            "https://github.com/termux/proot-distro/releases/download/v4.7.0/debian-bookworm-aarch64-pd-v4.7.0.tar.xz",
+            "https://ghfast.top/https://github.com/termux/proot-distro/releases/download/v4.7.0/debian-bookworm-aarch64-pd-v4.7.0.tar.xz"
         )
 
         // 各发行版元信息
         private val DISTRO_META = mapOf(
-            "ubuntu" to DistroMeta("Ubuntu 24.04", "ubuntu-base.tar.gz", ROOTFS_MIRRORS),
-            "alpine" to DistroMeta("Alpine 3.19", "alpine-minirootfs.tar.gz", ALPINE_ROOTFS_MIRRORS),
-            "debian" to DistroMeta("Debian 12", "debian-base.tar.gz", DEBIAN_ROOTFS_MIRRORS)
+            "ubuntu" to DistroMeta("Ubuntu 24.04 LTS", "ubuntu-base.tar.gz", ROOTFS_MIRRORS),
+            "alpine" to DistroMeta("Alpine 3.19 (轻量)", "alpine-minirootfs.tar.gz", ALPINE_ROOTFS_MIRRORS),
+            "debian" to DistroMeta("Debian 12", "debian-base.tar.xz", DEBIAN_ROOTFS_MIRRORS)
         )
 
         data class DistroMeta(
@@ -308,7 +309,13 @@ class LinuxEnvironment(private val context: Context) {
         try {
             val totalBytes = archive.length()
             var processed = 0L
-            GZIPInputStream(archive.inputStream()).use { gz ->
+            // 根据文件扩展名自动检测压缩格式
+            val decompressedStream = if (archive.name.endsWith(".xz")) {
+                XZCompressorInputStream(archive.inputStream())
+            } else {
+                GZIPInputStream(archive.inputStream())
+            }
+            decompressedStream.use { gz ->
                 TarArchiveInputStream(gz).use { tar ->
                     var entry: TarArchiveEntry? = tar.nextTarEntry
                     while (entry != null) {
