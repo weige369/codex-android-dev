@@ -288,7 +288,7 @@ private fun statusText(state: RuntimeState, connected: Boolean): String {
         RuntimeState.STARTING -> "正在启动..."
         RuntimeState.RUNNING -> if (connected) "Codex 运行中" else "Codex 已启动"
         RuntimeState.ERROR -> "Codex 运行异常"
-        RuntimeState.NATIVE_MODE -> "Codex 原生 API 模式"
+        RuntimeState.NATIVE_MODE -> "API 直连模式"
     }
 }
 
