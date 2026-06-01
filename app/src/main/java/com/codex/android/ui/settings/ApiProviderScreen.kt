@@ -230,7 +230,7 @@ fun ApiProviderScreen(
                 Spacer(Modifier.height(4.dp))
                 val selectedProvider = ApiProvider.getById(selectedProviderId)
                 val links = when (selectedProviderId) {
-                    "deepseek" -> "https://platform.deepseek.com/api_keys"
+                    "deepseek", "deepseek-coder" -> "https://platform.deepseek.com/api_keys"
                     "openai" -> "https://platform.openai.com/api-keys"
                     "siliconflow" -> "https://cloud.siliconflow.cn/account/ak"
                     "zhipu" -> "https://open.bigmodel.cn/usercenter/apikeys"
@@ -282,7 +282,7 @@ private fun ProviderCard(
                     )
                 }
                 Text(
-                    "默认模型: ${provider.defaultModel}",
+                    "默认模型: ${provider.defaultModel}" + if (provider.supportsThinking) " 🧠" else "",
                     fontSize = 11.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
