@@ -216,8 +216,8 @@ class ProotAgentService(private val context: Context) : ChatAgent {
      * 停止当前 Agent 进程。
      */
     fun disconnect() {
-        processManager.stop()
-        _connectionState.value = AgentConnectionState.DISCONNECTED
+        _connectionState.value = AgentConnectionState.CONNECTED
+        
         cleanupResponse()
         Log.i(TAG, "Agent 已断开")
     }
@@ -385,8 +385,8 @@ class ProotAgentService(private val context: Context) : ChatAgent {
      * 是否已配置 API。
      */
     override fun cancelStream() {
-        processManager.stop()
-        _connectionState.value = AgentConnectionState.DISCONNECTED
+        _connectionState.value = AgentConnectionState.CONNECTED
+        
         cleanupResponse()
         Log.i(TAG, "Stream cancelled")
     }
