@@ -86,6 +86,14 @@ fun SetupWizardScreen(
         if (isSetupComplete) onComplete()
     }
 
+    // 工具安装完成后自动跳转到下一步（AI配置）
+    LaunchedEffect(toolsInstallState.isCompleted) {
+        if (toolsInstallState.isCompleted && currentStep == 3) {
+            kotlinx.coroutines.delay(800)
+            viewModel.nextStep()
+        }
+    }
+
     // 权限请求 Launchers
     val storageLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.StartActivityForResult()
@@ -1100,6 +1108,8 @@ private fun DevToolsStep(
                     Icon(Icons.Default.CheckCircle, null, tint = Color(0xFF2ED573), modifier = Modifier.size(24.dp))
                     Spacer(Modifier.width(8.dp))
                     Text("工具安装完成!", fontWeight = FontWeight.Bold, color = Color(0xFF2ED573))
+                    Spacer(Modifier.width(8.dp))
+                    Text("即将进入下一步...", fontSize = 12.sp, color = Color(0xFF2ED573).copy(alpha = 0.7f))
                 }
             }
         } else {
