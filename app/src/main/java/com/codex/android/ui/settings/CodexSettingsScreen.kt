@@ -82,16 +82,17 @@ fun CodexSettingsScreen(
     } else "未安装"
 
     Scaffold(
+        containerColor = CodexBackground,
         topBar = {
             TopAppBar(
-                title = { Text("设置", fontSize = 18.sp, fontWeight = FontWeight.Bold) },
+                title = { Text("设置", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = CodexOnSurface) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "返回")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "返回", tint = CodexOnSurface)
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface
+                    containerColor = CodexBackground
                 )
             )
         }
@@ -106,15 +107,15 @@ fun CodexSettingsScreen(
         ) {
             // ===== Connection Mode =====
             item {
-                SectionHeader("连接方式")
+                CodexSectionHeader("连接方式", Icons.Default.Link)
             }
 
             item {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
-                    shape = CardShape,
+                    shape = RoundedCornerShape(12.dp),
                     colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceVariant
+                        containerColor = CodexSurfaceVariant
                     )
                 ) {
                     Column(modifier = Modifier.padding(16.dp)) {
@@ -152,13 +153,14 @@ fun CodexSettingsScreen(
             // ===== API Settings (when API mode) =====
             if (connMode == "api") {
                 item {
-                    SectionHeader("API 配置")
+                    CodexSectionHeader("API 配置", Icons.Default.Api)
                 }
                 item {
                     Card(
                         modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp),
                         colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.surfaceVariant
+                            containerColor = CodexSurfaceVariant
                         )
                     ) {
                         Column(modifier = Modifier.padding(16.dp)) {
@@ -207,21 +209,21 @@ fun CodexSettingsScreen(
 
             // ===== Security Level =====
             item {
-                SectionHeader("安全等级")
+                CodexSectionHeader("安全等级", Icons.Default.Shield)
             }
             item {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
-                    shape = CardShape,
+                    shape = RoundedCornerShape(12.dp),
                     colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceVariant
+                        containerColor = CodexSurfaceVariant
                     )
                 ) {
                     Column(modifier = Modifier.padding(16.dp)) {
                         Text(
                             "控制 AI 工具的权限范围（Shell 执行、文件读写）。",
                             fontSize = 12.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            color = CodexOnSurfaceVariant,
                             modifier = Modifier.padding(bottom = 8.dp, start = 4.dp)
                         )
                         ConnModeOption(
@@ -255,14 +257,14 @@ fun CodexSettingsScreen(
 
             // ===== Codex Binary =====
             item {
-                SectionHeader("Codex CLI 二进制")
+                CodexSectionHeader("Codex CLI 二进制", Icons.Default.Terminal)
             }
             item {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
-                    shape = CardShape,
+                    shape = RoundedCornerShape(12.dp),
                     colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceVariant
+                        containerColor = CodexSurfaceVariant
                     )
                 ) {
                     Column(modifier = Modifier.padding(16.dp)) {
@@ -272,17 +274,18 @@ fun CodexSettingsScreen(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Column {
-                                Text("状态", fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text("状态", fontSize = 14.sp, color = CodexOnSurfaceVariant)
                                 Text(
                                     if (isInstalled) "已安装 ($binarySize)" else "未安装",
                                     fontWeight = FontWeight.Medium,
-                                    fontSize = 14.sp
+                                    fontSize = 14.sp,
+                                    color = CodexOnSurface
                                 )
                             }
                             if (!isInstalled) {
                                 Button(
                                     onClick = { CodexRuntimeService.start(context) },
-                                    colors = ButtonDefaults.buttonColors(containerColor = CodexPrimary)
+                                    colors = ButtonDefaults.buttonColors(containerColor = CodexBrandOrange)
                                 ) {
                                     Text("下载")
                                 }
@@ -293,8 +296,8 @@ fun CodexSettingsScreen(
                             LinearProgressIndicator(
                                 progress = { 1f },
                                 modifier = Modifier.fillMaxWidth().height(4.dp),
-                                color = StatusOnline,
-                                trackColor = StatusOnline.copy(alpha = 0.1f)
+                                color = CodexBrandOrange,
+                                trackColor = CodexBrandOrange.copy(alpha = 0.1f)
                             )
                         }
                     }
@@ -304,7 +307,7 @@ fun CodexSettingsScreen(
             // ===== 版本检查与升级 =====
             if (isInstalled) {
                 item {
-                    SectionHeader("版本与升级")
+                    CodexSectionHeader("版本与升级", Icons.Default.SystemUpdate)
                 }
                 item {
                     CodexUpdateCard(codexManager = codexManager, context = context)
@@ -314,7 +317,7 @@ fun CodexSettingsScreen(
             // ===== Feature Navigation =====
             // ===== 手动导入二进制 =====
             item {
-                SectionHeader("手动导入")
+                CodexSectionHeader("手动导入", Icons.Default.Upload)
             }
             item {
                 ManualImportCard(
@@ -324,14 +327,14 @@ fun CodexSettingsScreen(
             }
 
             item {
-                SectionHeader("功能")
+                CodexSectionHeader("功能", Icons.Default.Extension)
             }
             item {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
-                    shape = CardShape,
+                    shape = RoundedCornerShape(12.dp),
                     colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceVariant
+                        containerColor = CodexSurfaceVariant
                     )
                 ) {
                     Column(modifier = Modifier.padding(8.dp)) {
@@ -385,14 +388,14 @@ fun CodexSettingsScreen(
 
             // ===== Info =====
             item {
-                SectionHeader("关于")
+                CodexSectionHeader("关于", Icons.Default.Info)
             }
             item {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
-                    shape = CardShape,
+                    shape = RoundedCornerShape(12.dp),
                     colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceVariant
+                        containerColor = CodexSurfaceVariant
                     )
                 ) {
                     Column(modifier = Modifier.padding(16.dp)) {
@@ -410,14 +413,25 @@ fun CodexSettingsScreen(
 }
 
 @Composable
-private fun SectionHeader(title: String) {
-    Text(
-        text = title,
-        fontSize = 12.sp,
-        fontWeight = FontWeight.SemiBold,
-        color = MaterialTheme.colorScheme.primary,
+private fun CodexSectionHeader(title: String, icon: ImageVector) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier.padding(top = 12.dp, bottom = 4.dp, start = 4.dp)
-    )
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = CodexBrandOrange,
+            modifier = Modifier.size(16.dp)
+        )
+        Spacer(Modifier.width(6.dp))
+        Text(
+            text = title,
+            fontSize = 12.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = CodexBrandOrange
+        )
+    }
 }
 
 @Composable
@@ -439,8 +453,8 @@ private fun ConnModeOption(
         Icon(
             icon,
             contentDescription = null,
-            tint = if (selected) MaterialTheme.colorScheme.primary
-                   else MaterialTheme.colorScheme.onSurfaceVariant,
+            tint = if (selected) CodexBrandOrange
+                   else CodexOnSurfaceVariant,
             modifier = Modifier.size(24.dp)
         )
         Spacer(Modifier.width(12.dp))
@@ -449,18 +463,22 @@ private fun ConnModeOption(
                 title,
                 fontSize = 14.sp,
                 fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
-                color = if (selected) MaterialTheme.colorScheme.primary
-                        else MaterialTheme.colorScheme.onSurface
+                color = if (selected) CodexBrandOrange
+                        else CodexOnSurface
             )
             Text(
                 subtitle,
                 fontSize = 12.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                color = CodexOnSurfaceVariant
             )
         }
         RadioButton(
             selected = selected,
-            onClick = onClick
+            onClick = onClick,
+            colors = RadioButtonDefaults.colors(
+                selectedColor = CodexBrandOrange,
+                unselectedColor = CodexOnSurfaceVariant
+            )
         )
     }
 }
@@ -475,7 +493,7 @@ private fun SettingsNavItem(
     Surface(
         onClick = onClick,
         shape = RoundedCornerShape(10.dp),
-        color = MaterialTheme.colorScheme.surface,
+        color = Color.Transparent,
         modifier = Modifier.fillMaxWidth()
     ) {
         Row(
@@ -485,13 +503,13 @@ private fun SettingsNavItem(
             Icon(icon, null, tint = CodexBrandOrange, modifier = Modifier.size(22.dp))
             Spacer(Modifier.width(12.dp))
             Column(modifier = Modifier.weight(1f)) {
-                Text(title, fontSize = 14.sp, fontWeight = FontWeight.Medium)
-                Text(subtitle, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(title, fontSize = 14.sp, fontWeight = FontWeight.Medium, color = CodexOnSurface)
+                Text(subtitle, fontSize = 11.sp, color = CodexOnSurfaceVariant)
             }
             Icon(
-                Icons.Default.KeyboardArrowRight,
+                Icons.Default.ChevronRight,
                 null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                tint = CodexOnSurfaceVariant,
                 modifier = Modifier.size(18.dp)
             )
         }
@@ -515,9 +533,9 @@ private fun CodexUpdateCard(
 
     Card(
         modifier = Modifier.fillMaxWidth(),
-        shape = CardShape,
+        shape = RoundedCornerShape(12.dp),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant
+            containerColor = CodexSurfaceVariant
         )
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
@@ -527,11 +545,12 @@ private fun CodexUpdateCard(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Column {
-                    Text("已安装版本", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("已安装版本", fontSize = 13.sp, color = CodexOnSurfaceVariant)
                     Text(
                         installedVersion?.let { "v$it" } ?: "未知（手动导入）",
                         fontWeight = FontWeight.Medium,
-                        fontSize = 14.sp
+                        fontSize = 14.sp,
+                        color = CodexOnSurface
                     )
                 }
                 if (!upgrading) {
@@ -560,7 +579,7 @@ private fun CodexUpdateCard(
 
             statusMsg?.let {
                 Spacer(Modifier.height(8.dp))
-                Text(it, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(it, fontSize = 13.sp, color = CodexOnSurfaceVariant)
             }
 
             if (updateAvailable && !upgrading) {
@@ -588,7 +607,7 @@ private fun CodexUpdateCard(
                         }
                     },
                     modifier = Modifier.fillMaxWidth(),
-                    colors = ButtonDefaults.buttonColors(containerColor = CodexPrimary)
+                    colors = ButtonDefaults.buttonColors(containerColor = CodexBrandOrange)
                 ) {
                     Text("升级到 v${latestVersion}")
                 }
@@ -596,12 +615,12 @@ private fun CodexUpdateCard(
 
             if (upgrading) {
                 Spacer(Modifier.height(12.dp))
-                Text("升级中... $progressPct%", fontSize = 13.sp)
+                Text("升级中... $progressPct%", fontSize = 13.sp, color = CodexOnSurface)
                 Spacer(Modifier.height(4.dp))
                 LinearProgressIndicator(
                     progress = { progressPct / 100f },
                     modifier = Modifier.fillMaxWidth().height(4.dp),
-                    color = CodexPrimary
+                    color = CodexBrandOrange
                 )
             }
         }
@@ -649,16 +668,16 @@ private fun ManualImportCard(
 
     Card(
         modifier = Modifier.fillMaxWidth(),
-        shape = CardShape,
+        shape = RoundedCornerShape(12.dp),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant
+            containerColor = CodexSurfaceVariant
         )
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
             Text(
                 "如果自动下载失败，可以手动导入 Codex 二进制文件",
                 fontSize = 13.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                color = CodexOnSurfaceVariant
             )
 
             // 折叠的导入说明
@@ -674,7 +693,7 @@ private fun ManualImportCard(
                 Icon(
                     Icons.Default.HelpOutline,
                     null,
-                    tint = MaterialTheme.colorScheme.primary,
+                    tint = CodexBrandOrange,
                     modifier = Modifier.size(18.dp)
                 )
                 Spacer(Modifier.width(8.dp))
@@ -682,12 +701,12 @@ private fun ManualImportCard(
                     "导入说明（文件格式 / 路径 / 校验）",
                     fontSize = 13.sp,
                     fontWeight = FontWeight.Medium,
-                    modifier = Modifier.weight(1f)
+                    color = CodexOnSurface
                 )
                 Icon(
                     if (helpExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
                     null,
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    tint = CodexOnSurfaceVariant,
                     modifier = Modifier.size(20.dp)
                 )
             }
@@ -702,7 +721,7 @@ private fun ManualImportCard(
                         append("• 导入后将存放到：filesDir/codex/codex 并自动赋予可执行权限")
                     },
                     fontSize = 12.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = CodexOnSurfaceVariant,
                     lineHeight = 18.sp
                 )
             }
@@ -732,7 +751,7 @@ private fun ManualImportCard(
                     },
                     modifier = Modifier.weight(1f),
                     enabled = !isImporting,
-                    colors = ButtonDefaults.buttonColors(containerColor = CodexPrimary)
+                    colors = ButtonDefaults.buttonColors(containerColor = CodexBrandOrange)
                 ) {
                     Icon(Icons.Default.CloudDownload, null, modifier = Modifier.size(18.dp))
                     Spacer(Modifier.width(6.dp))
@@ -746,7 +765,7 @@ private fun ManualImportCard(
                     importStatus!!,
                     fontSize = 12.sp,
                     color = when {
-                        isImporting -> MaterialTheme.colorScheme.onSurfaceVariant
+                        isImporting -> CodexOnSurfaceVariant
                         importOk -> StatusOnline
                         else -> MaterialTheme.colorScheme.error
                     },
@@ -765,8 +784,8 @@ private fun SettingsRow(label: String, value: String) {
             .padding(vertical = 3.dp),
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
-        Text(label, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Text(value, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+        Text(label, fontSize = 13.sp, color = CodexOnSurfaceVariant)
+        Text(value, fontSize = 13.sp, fontWeight = FontWeight.Medium, color = CodexBrandOrange)
     }
 }
 
