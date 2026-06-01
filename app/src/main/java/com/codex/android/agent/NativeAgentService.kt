@@ -18,6 +18,9 @@ import okhttp3.sse.EventSources
 import org.json.JSONArray
 import org.json.JSONObject
 import java.util.concurrent.ConcurrentLinkedQueue
+import com.codex.android.agent.ToolCallBridge
+import com.codex.android.agent.ToolPermissionManager
+import com.codex.android.agent.PermissionDecision
 import java.util.concurrent.TimeUnit
 
 /**
@@ -130,6 +133,17 @@ class NativeAgentService(private val context: Context) {
      * - 运行时动态挂载/卸载（如 proot 安装后自动挂载 Linux Shell）
      */
     private val capabilityRegistry = CapabilityRegistry(context)
+
+    /**
+     * 工具权限管理器（运行时安全：决定工具是否可以执行）
+     * 与 CapabilityRegistry 配合：
+     * - CapabilityRegistry 管理设备挂载（结构性安全，决定工具是否暴露给 LLM）
+     * - ToolPermissionManager 管理工具执行权限（运行时安全，决定工具是否可以执行）
+     */
+    private val permissionManager = ToolPermissionManager.getInstance(context)
+
+    /** 获取权限管理器（供 UI 层展示权限弹窗） */
+    fun getPermissionManager(): ToolPermissionManager = permissionManager
 
     /**
      * 获取能力设备注册表（供 UI 层查询设备状态/权限）。
@@ -354,6 +368,21 @@ class NativeAgentService(private val context: Context) {
         for (tc in toolCalls) {
             val toolName = tc.name
             val toolArgs = tc.argumentsBuilder.toString()
+            Log.i(TAG, "执行工具: $toolName")
+
+            // 权限检查（ToolPermissionManager ALLOW/ASK/FORBID）
+            val device = capabilityRegistry.getMountedDeviceByName(toolName)
+            val allowed = permissionManager.checkPermission(toolName, device)
+            if (!allowed) {
+                Log.w(TAG, "工具 $toolName 权限被拒绝")
+                conversationHistory.add(JSONObject().apply {
+                    put("role", "tool")
+                    put("tool_call_id", tc.id)
+                    put("content", "权限不足: 工具 '$toolName' 被禁止执行。请在设置中授予权限。")
+                })
+                onChunk("🚫 权限不足: $toolName\n")
+                continue
+            }
             Log.i(TAG, "执行工具: $toolName")
 
             onChunk("\n🔧 执行工具: $toolName\n")
