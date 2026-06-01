@@ -365,7 +365,7 @@ class AgentOrchestrator(private val context: Context) {
     /**
      * 检查 Agent 二进制是否已安装。
      */
-    fun isAgentInstalled(type: AgentType): Boolean {
+    suspend fun isAgentInstalled(type: AgentType): Boolean {
         return when (type) {
             AgentType.CODEX -> checkBinaryInProot("codex")
             AgentType.OPENCODE -> checkBinaryInProot("opencode")
