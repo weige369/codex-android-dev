@@ -61,6 +61,7 @@ class AgentBinaryManager(private val context: Context) {
         enum class InstallMethod {
             BINARY_DOWNLOAD,    // 直接下载二进制（Codex, OpenCode）
             PIP_INSTALL,        // pip install（OpenManus）
+            NPM_INSTALL,        // npm install（Codex via Node.js，规避 W^X 限制）
             SCRIPT_INSTALL      // 脚本安装（预留）
         }
 
@@ -68,9 +69,9 @@ class AgentBinaryManager(private val context: Context) {
             AgentBinaryDef(
                 agentType = AgentOrchestrator.AgentType.CODEX,
                 displayName = "Codex CLI",
-                description = "OpenAI Codex CLI - Rust 静态二进制",
-                installMethod = InstallMethod.BINARY_DOWNLOAD,
-                estimatedSize = "~15MB",
+                description = "OpenAI Codex CLI - 通过 Node.js 安装（规避 Android 16 W^X 限制）",
+                installMethod = InstallMethod.NPM_INSTALL,
+                estimatedSize = "~80MB",
                 version = "0.133.0"
             ),
             AgentBinaryDef(
@@ -171,6 +172,7 @@ class AgentBinaryManager(private val context: Context) {
         when (def.installMethod) {
             InstallMethod.BINARY_DOWNLOAD -> installBinary(def, onProgress)
             InstallMethod.PIP_INSTALL -> installViaPip(def, onProgress)
+            InstallMethod.NPM_INSTALL -> installViaNpm(def, onProgress)
             InstallMethod.SCRIPT_INSTALL -> {
                 onProgress(InstallProgress(InstallPhase.FAILED, 0f, "脚本安装暂未实现"))
                 false
@@ -356,6 +358,16 @@ class AgentBinaryManager(private val context: Context) {
             target.setExecutable(true, false)
             target.setReadable(true, false)
 
+            // 在 proot 内部也执行 chmod +x，确保权限正确（某些 Android 版本 setExecutable 不足）
+            val chmodResult = linuxEnv.runCommand("chmod +x $PROOT_BIN_DIR/$binaryName", 5_000)
+            if (chmodResult.exitCode != 0) {
+                Log.w(TAG, "proot 内 chmod 失败: ${chmodResult.stderr}, 尝试继续")
+            }
+
+            // 验证二进制可执行性
+            val testResult = linuxEnv.runCommand("file $PROOT_BIN_DIR/$binaryName", 5_000)
+            Log.i(TAG, "二进制类型: ${testResult.stdout.take(100)}")
+
             Log.i(TAG, "二进制已安装: ${target.absolutePath} (${target.length() / 1024}KB)")
             true
         } catch (e: Exception) {
@@ -406,6 +418,103 @@ class AgentBinaryManager(private val context: Context) {
                 "pip 安装失败: ${result.stderr.take(200)}"))
             return false
         }
+
+        // 记录安装状态
+        prefs.edit()
+            .putBoolean("${def.agentType.id}_installed", true)
+            .putString("${def.agentType.id}_version", def.version)
+            .apply()
+
+        onProgress(InstallProgress(InstallPhase.COMPLETED, 1f, "${def.displayName} 安装完成!"))
+        return true
+    }
+
+    // ===== npm 安装 =====
+
+    /**
+     * 通过 npm 安装 Agent（适用于 Codex CLI）。
+     *
+     * 此方法在 proot 内部使用 Node.js + npm 安装，绕过 Android 16 W^X 限制。
+     * npm 安装的命令是 shell 脚本包装器（由 node 解释执行），不受 W^X 约束。
+     *
+     * 流程：
+     * 1. 检查 Node.js 是否已安装（如未安装，通过 apt 安装）
+     * 2. npm install -g @openai/codex
+     * 3. 验证 codex 命令可用
+     */
+    private suspend fun installViaNpm(
+        def: AgentBinaryDef,
+        onProgress: (InstallProgress) -> Unit
+    ): Boolean {
+        onProgress(InstallProgress(InstallPhase.CHECKING, 0.1f, "检查 Node.js 环境..."))
+
+        // 检查 Node.js 是否可用
+        val nodeCheck = linuxEnv.runCommand("node --version", 10_000)
+        if (nodeCheck.exitCode != 0) {
+            onProgress(InstallProgress(InstallPhase.INSTALLING, 0.15f, "正在安装 Node.js..."))
+
+            // 通过 apt 安装 Node.js（Debian/Ubuntu 仓库版本）
+            val aptResult = linuxEnv.runCommand(
+                "apt-get update -qq && apt-get install -y -qq nodejs npm",
+                300_000  // 5 分钟超时
+            )
+
+            if (aptResult.exitCode != 0) {
+                // apt 安装失败，尝试 nvm
+                onProgress(InstallProgress(InstallPhase.INSTALLING, 0.2f,
+                    "apt 安装 Node.js 失败，尝试 nvm..."))
+                val nvmResult = linuxEnv.runCommand(
+                    buildString {
+                        append("export HOME=/root && ")
+                        append("if [ ! -d /root/.nvm ]; then ")
+                        append("curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash 2>&1; ")
+                        append("fi && ")
+                        append("export NVM_DIR="/root/.nvm" && ")
+                        append("[ -s "\$NVM_DIR/nvm.sh" ] && . "\$NVM_DIR/nvm.sh" && ")
+                        append("nvm install 22 && nvm use 22 && nvm alias default 22")
+                    },
+                    600_000
+                )
+
+                if (nvmResult.exitCode != 0) {
+                    onProgress(InstallProgress(InstallPhase.FAILED, 0f,
+                        "Node.js 安装失败: ${nvmResult.stderr.take(200)}"))
+                    return false
+                }
+            }
+        }
+
+        val nodeVer = linuxEnv.runCommand("node --version", 5_000)
+        Log.i(TAG, "Node.js 版本: ${nodeVer.stdout.trim()}")
+
+        // 安装 Codex CLI
+        onProgress(InstallProgress(InstallPhase.INSTALLING, 0.4f,
+            "正在安装 ${def.displayName} (npm install)..."))
+
+        val npmResult = linuxEnv.runCommand(
+            "npm install -g @openai/codex 2>&1",
+            600_000  // 10 分钟超时
+        )
+
+        if (npmResult.exitCode != 0) {
+            onProgress(InstallProgress(InstallPhase.FAILED, 0f,
+                "npm 安装失败: ${npmResult.stderr.take(200)}"))
+            return false
+        }
+
+        // 验证安装
+        onProgress(InstallProgress(InstallPhase.VERIFYING, 0.9f, "验证安装..."))
+        val verifyResult = linuxEnv.runCommand("which codex && codex --version", 10_000)
+        if (verifyResult.exitCode != 0) {
+            onProgress(InstallProgress(InstallPhase.FAILED, 0f,
+                "Codex CLI 安装验证失败"))
+            return false
+        }
+
+        Log.i(TAG, "Codex CLI 安装成功: ${verifyResult.stdout.trim()}")
+
+        // 配置
+        configureAgent(def.agentType)
 
         // 记录安装状态
         prefs.edit()
