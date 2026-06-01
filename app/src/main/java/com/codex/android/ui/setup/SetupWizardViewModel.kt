@@ -304,13 +304,13 @@ class SetupWizardViewModel : ViewModel() {
                 )
             }
 
-            _linuxInstallState.value = if (ok) {
-                LinuxInstallState(isInstalled = true, message = "安装完成!")
+            if (ok) {
+                _linuxInstallState.value = LinuxInstallState(isInstalled = true, message = "安装完成!")
                 // 持久化 Linux 安装状态
                 context.getSharedPreferences("codex_setup_prefs", android.content.Context.MODE_PRIVATE)
                     .edit().putBoolean("linux_installed", true).apply()
             } else {
-                LinuxInstallState(error = "安装失败，请检查网络后重试")
+                _linuxInstallState.value = LinuxInstallState(error = "安装失败，请检查网络后重试")
             }
         }
     }
@@ -350,12 +350,12 @@ class SetupWizardViewModel : ViewModel() {
                 )
             }
 
-            _toolsInstallState.value = if (ok) {
-                ToolsInstallState(isCompleted = true, message = "工具安装完成!")
+            if (ok) {
+                _toolsInstallState.value = ToolsInstallState(isCompleted = true, message = "工具安装完成!")
                 // 持久化已安装工具列表，供 NativeAgentService 读取
                 saveInstalledTools(context, tools)
             } else {
-                ToolsInstallState(error = "部分工具安装失败")
+                _toolsInstallState.value = ToolsInstallState(error = "部分工具安装失败")
             }
         }
     }
@@ -364,8 +364,8 @@ class SetupWizardViewModel : ViewModel() {
      * 将已安装的工具列表保存到 SharedPreferences。
      * NativeAgentService 在构建 system prompt 时会读取此列表。
      */
-    private fun saveInstalledTools(context: Context, tools: Set<String>) {
-        val prefs = context.getSharedPreferences("codex_setup_prefs", android.content.Context.MODE_PRIVATE)
+    private fun saveInstalledTools(ctx: android.content.Context, tools: Set<String>) {
+        val prefs = ctx.getSharedPreferences("codex_setup_prefs", android.content.Context.MODE_PRIVATE)
         prefs.edit().putStringSet("installed_tools", tools).apply()
         // 同时标记 Linux 已安装
         prefs.edit().putBoolean("linux_installed", true).apply()
