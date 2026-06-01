@@ -83,6 +83,7 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.codex.android.agent.ChatAgent
+import com.codex.android.agent.AgentConnectionState
 import com.codex.android.ui.theme.CodexBrandOrange
 import com.codex.android.ui.theme.CodexCodeBg
 import com.codex.android.ui.theme.CodexOnSurface
@@ -180,7 +181,7 @@ fun NativeChatView(
 
     // 监听流式状态
     LaunchedEffect(agent.connectionState) {
-        isStreaming = agent.connectionState.value.name == "STREAMING"
+        isStreaming = agent.connectionState.value == AgentConnectionState.STREAMING
     }
 
     // 自动滚动到底部
