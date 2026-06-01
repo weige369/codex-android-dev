@@ -38,6 +38,7 @@ import androidx.compose.ui.unit.sp
 // ViewModel manually instantiated - no lifecycle-viewmodel-compose dependency
 import com.codex.android.environment.ProotEnvironment
 import com.codex.android.ui.theme.CodexPrimary
+import com.codex.android.agent.AgentOrchestrator
 import kotlinx.coroutines.launch
 
 /**
@@ -1210,51 +1211,6 @@ private fun AgentOptionCard(
                 }
             }
             Text(option.estimatedSize, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-    }
-}
-
-    isSelected: Boolean,
-    onToggle: () -> Unit,
-    isEnabled: Boolean
-) {
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(
-                enabled = isEnabled,
-                onClick = onToggle,
-                interactionSource = remember { MutableInteractionSource() },
-                indication = null
-            ),
-        colors = CardDefaults.cardColors(
-            containerColor = if (isSelected)
-                CodexPrimary.copy(alpha = 0.08f)
-            else
-                MaterialTheme.colorScheme.surface.copy(alpha = 0.3f)
-        ),
-        shape = RoundedCornerShape(8.dp)
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Checkbox(
-                checked = isSelected,
-                onCheckedChange = { onToggle() },
-                enabled = isEnabled,
-                colors = CheckboxDefaults.colors(checkedColor = CodexPrimary)
-            )
-            Spacer(Modifier.width(4.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Text(tool.displayName, fontWeight = FontWeight.Medium, fontSize = 13.sp)
-                Text(tool.description, fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-            Text(
-                tool.estimatedSize,
-                fontSize = 10.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
         }
     }
 }
