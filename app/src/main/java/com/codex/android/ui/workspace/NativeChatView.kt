@@ -163,8 +163,8 @@ fun NativeChatView(
     val currentToolCalls = remember { mutableStateListOf<ToolCallInfo>() }
 
     // 模型选择状态
-    val availableModels = remember { listOf("codex-1", "codex-mini", "o3-mini") }
-    var selectedModelIndex by remember { mutableStateOf(0) }
+    val currentModelName = remember(ctx) { NativeAgentService.getInstance(ctx).getApiModel() }
+    
 
     // 长按菜单状态
     var menuMessageId by remember { mutableStateOf<String?>(null) }
@@ -313,9 +313,9 @@ fun NativeChatView(
             inputText = inputText,
             onInputTextChange = { inputText = it },
             isStreaming = isStreaming,
-            currentModel = availableModels[selectedModelIndex],
+            currentModel = currentModelName,
             onModelSwitch = {
-                selectedModelIndex = (selectedModelIndex + 1) % availableModels.size
+                val intent = android.content.Intent(ctx, com.codex.android.ui.CodexActivity::class.java).apply { putExtra("navigate_to", "api_provider") }; ctx.startActivity(intent)
             },
             onNewChat = {
                 messages.clear()
