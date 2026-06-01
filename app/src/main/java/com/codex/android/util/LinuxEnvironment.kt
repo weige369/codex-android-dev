@@ -60,18 +60,32 @@ class LinuxEnvironment(private val context: Context) {
 
         // 各发行版元信息
         private val DISTRO_META = mapOf(
-            "ubuntu" to DistroMeta("Ubuntu 24.04 LTS", "ubuntu-base.tar.gz", ROOTFS_MIRRORS),
-            "alpine" to DistroMeta("Alpine 3.19 (轻量)", "alpine-minirootfs.tar.gz", ALPINE_ROOTFS_MIRRORS),
-            "debian" to DistroMeta("Debian 12", "debian-base.tar.xz", DEBIAN_ROOTFS_MIRRORS)
+            "ubuntu" to DistroMeta("Ubuntu 24.04 LTS", "ubuntu-base.tar.gz", ROOTFS_MIRRORS, expectedSha256 = "PLACEHOLDER_UBUNTU_SHA256"),
+            "alpine" to DistroMeta("Alpine 3.19 (轻量)", "alpine-minirootfs.tar.gz", ALPINE_ROOTFS_MIRRORS, expectedSha256 = "PLACEHOLDER_ALPINE_SHA256"),
+            "debian" to DistroMeta("Debian 12", "debian-base.tar.xz", DEBIAN_ROOTFS_MIRRORS, expectedSha256 = "PLACEHOLDER_DEBIAN_SHA256")
         )
 
         data class DistroMeta(
             val displayName: String,
             val archiveName: String,
-            val mirrors: List<String>
+            val mirrors: List<String>,
+            val expectedSha256: String = ""  // placeholder, to be updated with real hashes
         )
 
         private const val CONNECT_TIMEOUT_MS = 10_000
+
+        /** Compute SHA-256 hex digest of a file */
+        private fun computeSHA256(file: File): String {
+            val md = java.security.MessageDigest.getInstance("SHA-256")
+            file.inputStream().use { fis ->
+                val buffer = ByteArray(8192)
+                var read: Int
+                while (fis.read(buffer).also { read = it } != -1) {
+                    md.update(buffer, 0, read)
+                }
+            }
+            return md.digest().joinToString("") { "%02x".format(it) }
+        }
     }
 
     enum class EngineState {
@@ -264,6 +278,19 @@ class LinuxEnvironment(private val context: Context) {
                     conn.disconnect()
 
                     if (archive.length() > 1_000_000) {
+                        // SHA256 校验（MITM 防护）
+                        val expectedHash = meta.expectedSha256
+                        if (expectedHash.isNotEmpty() && !expectedHash.startsWith("PLACEHOLDER_")) {
+                            val actualHash = computeSHA256(archive)
+                            if (actualHash != expectedHash) {
+                                Log.e(TAG, "SHA256 mismatch for ${meta.archiveName}: expected=$expectedHash, got=$actualHash")
+                                archive.delete()
+                                continue  // try next mirror
+                            }
+                            Log.i(TAG, "SHA256 verified for ${meta.archiveName}")
+                        } else {
+                            Log.w(TAG, "SHA256 not configured for ${meta.archiveName}, skipping validation")
+                        }
                         downloaded = true
                         onStatus?.invoke("下载完成 (${archive.length() / 1024 / 1024}MB)")
                         break
