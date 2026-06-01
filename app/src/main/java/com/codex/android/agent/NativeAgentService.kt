@@ -36,7 +36,7 @@ import java.util.concurrent.TimeUnit
  *
  * 这使得 Codex 在 Android 36 上无需 proot 即可工作。
  */
-class NativeAgentService(private val context: Context) {
+class NativeAgentService(private val context: Context) : ChatAgent {
 
     companion object {
         private const val TAG = "NativeAgentService"
