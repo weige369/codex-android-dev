@@ -69,10 +69,30 @@ class ShellTool(private val context: android.content.Context) : AgentTool {
     }
 
     private fun needsProot(command: String): Boolean {
-        // 这些命令需要 Linux 环境
-        val prootCommands = listOf("apt", "apt-get", "dpkg", "node", "nodejs", "npm",
-            "python", "python3", "pip", "pip3", "gcc", "g++", "make", "cmake")
-        return prootCommands.any { command.startsWith(it) || command.contains(" $it ") }
+        // 这些命令需要 Linux 环境（在 Android shell 中不存在或功能受限）
+        val prootCommands = listOf(
+            // 包管理
+            "apt", "apt-get", "dpkg", "snap",
+            // 编程语言 & 运行时
+            "node", "nodejs", "npm", "npx", "yarn", "pnpm",
+            "python", "python3", "pip", "pip3", "ipython",
+            "gcc", "g++", "cc", "clang", "rustc", "cargo",
+            "java", "javac", "gradle", "mvn",
+            "go ", "go build", "go run", "go test",
+            "ruby", "gem", "bundle",
+            // 开发工具
+            "make", "cmake", "ninja",
+            "git ", "git clone", "git push", "git pull",
+            // 编辑器
+            "vim", "nano", "emacs",
+            // 系统工具
+            "htop", "top", "tmux", "screen",
+            "neofetch", "lsof", "strace",
+            "ssh ", "scp ", "rsync"
+        )
+        return prootCommands.any { 
+            command.trimStart().startsWith(it) || command.contains(" $it") 
+        }
     }
 
     private fun executeDirect(command: String): String {
