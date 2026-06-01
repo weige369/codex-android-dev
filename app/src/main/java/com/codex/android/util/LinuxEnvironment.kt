@@ -170,6 +170,8 @@ class LinuxEnvironment(private val context: Context) {
         val ai2 = context.packageManager?.getApplicationInfo(context.packageName, 0)
         val nativeLibraryDir = ai2?.nativeLibraryDir ?: ""
         env["LD_LIBRARY_PATH"] = "$nativeLibraryDir:${libLinkDir.path}:/system/lib64:/system/lib"
+        env["PROOT_TMP"] = File(context.cacheDir, "proot-tmp").also { it.mkdirs() }.path
+        env["PROOT_LAZY_WRITERS"] = "1"
         return env
     }
 
@@ -178,6 +180,9 @@ class LinuxEnvironment(private val context: Context) {
         val rootfs = getRootfsDir().path
         return listOf(
             info.prootPath,
+            "--link2symlink",
+            "--sysvipc",
+            "--kernel-release=6.2.1-PRoot-Distro",
             "--rootfs=$rootfs",
             "--root-id",
             "--kill-on-exit",
@@ -185,6 +190,8 @@ class LinuxEnvironment(private val context: Context) {
             "-b", "/dev",
             "-b", "/proc",
             "-b", "/sys",
+            "-b", "/system",
+            "-b", "/apex",
             "-b", "/data/data/${context.packageName}:$rootfs/data/data/${context.packageName}",
             "-b", "/storage",
             "-w", "/root",
