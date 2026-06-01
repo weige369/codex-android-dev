@@ -64,6 +64,7 @@ import com.codex.android.data.preferences.SetupPreferences
 import com.codex.android.ui.github.GitHubRepoScreen
 import com.codex.android.ui.github.GitHubPRScreen
 import com.codex.android.ui.github.GitHubIssueScreen
+import com.codex.android.data.preferences.GitHubAuthPreferences
 import com.codex.android.util.AndroidShellExecutor
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
@@ -469,8 +470,98 @@ class CodexActivity : ComponentActivity() {
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
+        // Handle OAuth callback first
+        handleOAuthCallback(intent)
         handleSendIntent(intent)
     }
+
+    /**
+     * Handle GitHub OAuth PKCE callback: codex://github-oauth-callback?code=xxx&state=xxx
+     *
+     * PKCE flow: exchange authorization code + code_verifier for access token,
+     * then fetch user info and save auth state.
+     */
+    private fun handleOAuthCallback(intent: Intent?) {
+        val uri = intent?.data ?: return
+        if (!GitHubAuthPreferences.isOAuthRedirectUri(uri)) return
+
+        val code = uri.getQueryParameter("code")
+        val state = uri.getQueryParameter("state")
+        val error = uri.getQueryParameter("error")
+
+        if (error != null) {
+            val errorDesc = uri.getQueryParameter("error_description") ?: error
+            Log.e(TAG, "OAuth error: $error - $errorDesc")
+            android.widget.Toast.makeText(this, "GitHub 登录失败: $errorDesc", android.widget.Toast.LENGTH_LONG).show()
+            return
+        }
+
+        if (code == null || state == null) {
+            Log.e(TAG, "OAuth callback missing code or state")
+            android.widget.Toast.makeText(this, "GitHub 登录失败: 参数缺失", android.widget.Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        Log.i(TAG, "OAuth callback received, exchanging code for token...")
+        lifecycleScope.launch(Dispatchers.IO) {
+            try {
+                val authPrefs = GitHubAuthPreferences.getInstance(this@CodexActivity)
+                val result = authPrefs.exchangeCodeForToken(code, state)
+
+                when (result) {
+                    is GitHubAuthPreferences.ExchangeResult.Success -> {
+                        // Fetch user info with the new token
+                        val apiClient = com.codex.android.codex.github.GitHubApiClient(this@CodexActivity)
+                        val userResult = apiClient.getCurrentUser()
+
+                        if (userResult.isSuccess) {
+                            val ghUser = userResult.getOrThrow()
+                            val gitHubUser = GitHubUser(
+                                id = 0L,
+                                login = ghUser.login,
+                                name = ghUser.name,
+                                email = null,
+                                avatarUrl = ghUser.avatarUrl,
+                                bio = ghUser.bio,
+                                publicRepos = ghUser.publicRepos,
+                                followers = ghUser.followers,
+                                following = ghUser.following
+                            )
+                            authPrefs.saveAuthInfo(
+                                accessToken = result.accessToken,
+                                tokenType = result.tokenType,
+                                expiresIn = result.expiresIn,
+                                refreshToken = result.refreshToken,
+                                userInfo = gitHubUser,
+                                grantedScope = result.grantedScope
+                            )
+                            Log.i(TAG, "GitHub login success: ${ghUser.login}")
+                            runOnUiThread {
+                                android.widget.Toast.makeText(this@CodexActivity, "GitHub 登录成功: ${ghUser.login}", android.widget.Toast.LENGTH_SHORT).show()
+                            }
+                        } else {
+                            Log.e(TAG, "Failed to fetch GitHub user info after token exchange")
+                            runOnUiThread {
+                                android.widget.Toast.makeText(this@CodexActivity, "GitHub 登录成功但获取用户信息失败", android.widget.Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                    }
+                    is GitHubAuthPreferences.ExchangeResult.Error -> {
+                        Log.e(TAG, "Token exchange failed: ${result.message}")
+                        runOnUiThread {
+                            android.widget.Toast.makeText(this@CodexActivity, "GitHub 登录失败: ${result.message}", android.widget.Toast.LENGTH_LONG).show()
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "OAuth callback handling error", e)
+                runOnUiThread {
+                    android.widget.Toast.makeText(this@CodexActivity, "GitHub 登录异常: ${e.message}", android.widget.Toast.LENGTH_LONG).show()
+                }
+            }
+        }
+    }
+
 
     private fun handleSendIntent(intent: Intent?) {
         if (intent?.action == Intent.ACTION_SEND && intent.type?.startsWith("text/") == true) {
