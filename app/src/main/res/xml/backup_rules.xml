@@ -1,13 +1,13 @@
-<?xml version="1.0" encoding="utf-8"?><!--
-   Sample backup rules file; uncomment and customize as necessary.
-   See https://developer.android.com/guide/topics/data/autobackup
-   for details.
-   Note: This file is ignored for devices older that API 31
-   See https://developer.android.com/about/versions/12/backup-restore
--->
+<?xml version="1.0" encoding="utf-8"?>
 <full-backup-content>
-    <!--
-   <include domain="sharedpref" path="."/>
-   <exclude domain="sharedpref" path="device.xml"/>
--->
+    <!-- 允许备份常规 SharedPreferences -->
+    <include domain="sharedpref" path="."/>
+    <!-- 排除敏感数据：GitHub token、API key -->
+    <exclude domain="sharedpref" path="github_prefs.xml"/>
+    <exclude domain="sharedpref" path="codex_prefs.xml"/>
+    <exclude domain="sharedpref" path="codex_capability_prefs.xml"/>
+    <exclude domain="sharedpref" path="codex_setup_prefs.xml"/>
+    <!-- 排除 rootfs 和 agent 二进制（体积大，可重新下载） -->
+    <exclude domain="file" path="linux-rootfs/"/>
+    <exclude domain="file" path="agent-binaries/"/>
 </full-backup-content>
