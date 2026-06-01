@@ -48,9 +48,6 @@ class NativeAgentService(private val context: Context) : ChatAgent {
         private const val KEY_CUSTOM_URL = "custom_url"
 
         /** Agent 连接状态 */
-        enum class ConnectionState {
-            DISCONNECTED, CONNECTING, CONNECTED, STREAMING, ERROR
-        }
 
         /** 单例 */
         @Volatile private var INSTANCE: NativeAgentService? = null
@@ -93,12 +90,12 @@ class NativeAgentService(private val context: Context) : ChatAgent {
         }
     }
 
-    fun isConfigured(): Boolean = getApiKey().isNotBlank() && getApiUrl().isNotBlank()
+    override fun isConfigured(): Boolean = getApiKey().isNotBlank() && getApiUrl().isNotBlank()
 
     // ===== 状态 =====
 
-    private val _connectionState = MutableStateFlow(ConnectionState.DISCONNECTED)
-    val connectionState: StateFlow<ConnectionState> = _connectionState.asStateFlow()
+    private val _connectionState = MutableStateFlow(AgentConnectionState.DISCONNECTED)
+    override val connectionState: StateFlow<AgentConnectionState> = _connectionState.asStateFlow()
 
     private val _isReady = MutableStateFlow(false)
     val isReady: StateFlow<Boolean> = _isReady.asStateFlow()
@@ -190,7 +187,7 @@ class NativeAgentService(private val context: Context) : ChatAgent {
      * 发送消息并获取流式响应。
      * 回调在 IO 线程执行，UI 层需要切线程。
      */
-    fun sendPromptStream(
+    override fun sendPromptStream(
         prompt: String,
         onChunk: (String) -> Unit,
         onComplete: (String) -> Unit,
@@ -242,7 +239,7 @@ class NativeAgentService(private val context: Context) : ChatAgent {
             .post(requestBody.toString().toRequestBody("application/json".toMediaType()))
             .build()
 
-        _connectionState.value = ConnectionState.STREAMING
+        _connectionState.value = AgentConnectionState.STREAMING
 
         val factory = EventSources.createFactory(client)
         currentEventSource = factory.newEventSource(request, object : EventSourceListener() {
@@ -252,7 +249,7 @@ class NativeAgentService(private val context: Context) : ChatAgent {
 
             override fun onOpen(eventSource: EventSource, response: Response) {
                 Log.i(TAG, "API 流连接已打开")
-                _connectionState.value = ConnectionState.CONNECTED
+                _connectionState.value = AgentConnectionState.CONNECTED
             }
 
             override fun onEvent(eventSource: EventSource, id: String?, type: String?, data: String) {
@@ -271,7 +268,7 @@ class NativeAgentService(private val context: Context) : ChatAgent {
                             put("role", "assistant")
                             put("content", fullContent)
                         })
-                        _connectionState.value = ConnectionState.CONNECTED
+                        _connectionState.value = AgentConnectionState.CONNECTED
                         onComplete(fullContent)
                     }
                     return
@@ -324,13 +321,13 @@ class NativeAgentService(private val context: Context) : ChatAgent {
                     else -> "未知错误"
                 }
                 Log.e(TAG, errorMsg, t)
-                _connectionState.value = ConnectionState.ERROR
+                _connectionState.value = AgentConnectionState.ERROR
                 onError(errorMsg)
             }
 
             override fun onClosed(eventSource: EventSource) {
                 Log.i(TAG, "API 流已关闭")
-                _connectionState.value = ConnectionState.DISCONNECTED
+                _connectionState.value = AgentConnectionState.DISCONNECTED
             }
         })
     }
@@ -471,7 +468,7 @@ class NativeAgentService(private val context: Context) : ChatAgent {
                             put("role", "assistant")
                             put("content", fullContent)
                         })
-                        _connectionState.value = ConnectionState.CONNECTED
+                        _connectionState.value = AgentConnectionState.CONNECTED
                         onComplete(fullContent)
                     }
                     return
@@ -519,20 +516,20 @@ class NativeAgentService(private val context: Context) : ChatAgent {
                     else -> "未知错误"
                 }
                 Log.e(TAG, errorMsg, t)
-                _connectionState.value = ConnectionState.ERROR
+                _connectionState.value = AgentConnectionState.ERROR
                 onError(errorMsg)
             }
 
             override fun onClosed(eventSource: EventSource) {
-                _connectionState.value = ConnectionState.DISCONNECTED
+                _connectionState.value = AgentConnectionState.DISCONNECTED
             }
         })
     }
 
-    fun cancelStream() {
+    override fun cancelStream() {
         currentEventSource?.cancel()
         currentEventSource = null
-        _connectionState.value = ConnectionState.CONNECTED
+        _connectionState.value = AgentConnectionState.CONNECTED
     }
 
     /**
@@ -565,7 +562,7 @@ class NativeAgentService(private val context: Context) : ChatAgent {
             mountCapabilities()
             withContext(Dispatchers.Main) {
                 _isReady.value = true
-                _connectionState.value = ConnectionState.CONNECTED
+                _connectionState.value = AgentConnectionState.CONNECTED
             }
         }
     }
