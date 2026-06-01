@@ -1,12 +1,20 @@
 <?xml version="1.0" encoding="utf-8"?>
 <network-security-config>
-    <!-- 默认禁止明文 HTTP 流量，仅信任系统/用户证书 -->
+    <!-- Release: 仅信任系统 CA 证书 -->
     <base-config cleartextTrafficPermitted="false">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+
+    <!-- Debug: 允许用户 CA 证书（方便开发调试） -->
+    <debug-overrides>
         <trust-anchors>
             <certificates src="system" />
             <certificates src="user" />
         </trust-anchors>
-    </base-config>
+    </debug-overrides>
+
     <!-- 仅对本机回环地址允许明文流量（Codex 本地 WebSocket / HTTP 服务） -->
     <domain-config cleartextTrafficPermitted="true">
         <domain includeSubdomains="false">localhost</domain>
