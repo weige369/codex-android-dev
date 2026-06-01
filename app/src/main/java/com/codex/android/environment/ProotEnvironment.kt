@@ -298,8 +298,21 @@ class ProotEnvironment(private val context: Context) {
         try {
             val rootfs = linuxEnv.getRootfsDir()
 
-            // 配置镜像源（apt）
-            if (distro != "alpine") {
+            // 配置镜像源
+            if (distro == "alpine") {
+                // Alpine: 配置 apk 镜像源
+                val mirrorUrl = MIRROR_SOURCES.find { it.id == mirror }?.url
+                val apkBase = if (!mirrorUrl.isNullOrEmpty()) "$mirrorUrl/alpine" else "https://dl-cdn.alpinelinux.org/alpine"
+                val apkRepos = File(rootfs, "etc/apk/repositories")
+                if (apkRepos.parentFile?.exists() == true || apkRepos.parentFile?.mkdirs() == true) {
+                    apkRepos.writeText("""
+                        $apkBase/v3.19/main
+                        $apkBase/v3.19/community
+                    """.trimIndent() + "\n")
+                    Log.i(TAG, "Alpine apk repos configured: $apkBase")
+                }
+            } else {
+                // Debian/Ubuntu: 配置 apt 镜像源
                 val mirrorUrl = MIRROR_SOURCES.find { it.id == mirror }?.url
                 if (!mirrorUrl.isNullOrEmpty()) {
                     val sourcesList = File(rootfs, "etc/apt/sources.list")
