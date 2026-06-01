@@ -204,6 +204,9 @@ class AgentProcessManager(private val context: Context) {
 
         return listOf(
             info.prootPath,
+            "--link2symlink",
+            "--sysvipc",
+            "--kernel-release=6.2.1-PRoot-Distro",
             "--rootfs=$rootfs",
             "--root-id",
             "--kill-on-exit",
@@ -211,6 +214,8 @@ class AgentProcessManager(private val context: Context) {
             "-b", "/dev",
             "-b", "/proc",
             "-b", "/sys",
+            "-b", "/system",
+            "-b", "/apex",
             "-b", workspaceBind,
             "-b", "/storage",
             "-b", "${context.cacheDir.absolutePath}:${rootfs}${context.cacheDir.absolutePath}",
