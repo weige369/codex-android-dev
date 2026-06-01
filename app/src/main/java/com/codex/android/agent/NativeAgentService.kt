@@ -126,9 +126,25 @@ class NativeAgentService(private val context: Context) {
     }
 
     fun registerDefaultTools() {
+        // 核心工具
         registerTool(ShellTool(context))
         registerTool(FileReadTool(context))
         registerTool(FileWriteTool(context))
+        // 扩展工具
+        registerTool(SearchTool(context))
+        registerTool(ProotEnvTool(context))
+    }
+
+    /**
+     * 根据环境状态动态注册工具。
+     * 如果 proot Linux 已就绪，注册额外的 Linux 专用工具。
+     */
+    fun registerEnvironmentAwareTools() {
+        val devEnv = com.codex.android.util.DevelopmentEnvironment(context)
+        val linuxInfo = devEnv.getSelfContainedLinuxInfo()
+        if (linuxInfo.state == com.codex.android.util.LinuxEnvironment.EngineState.READY) {
+            registerTool(LinuxShellTool(context))
+        }
     }
 
     fun getToolDefinitions(): JSONArray {
@@ -526,24 +542,63 @@ class NativeAgentService(private val context: Context) {
     // ===== 辅助 =====
 
     private fun buildSystemPrompt(): String {
+        // 动态检测环境状态
+        val devEnv = com.codex.android.util.DevelopmentEnvironment(context)
+        val envInfo = runCatching { devEnv.getSelfContainedLinuxInfo() }.getOrNull()
+        val hasProot = envInfo?.state == com.codex.android.util.LinuxEnvironment.EngineState.READY
+
+        // 检测已安装的工具
+        val installedTools = runCatching {
+            val linuxEnv = com.codex.android.util.LinuxEnvironment(context)
+            if (linuxEnv.isInstalled()) {
+                val prootEnv = com.codex.android.environment.ProotEnvironment(context)
+                val categories = com.codex.android.environment.ProotEnvironment.TOOL_CATEGORIES
+                val available = mutableListOf<String>()
+                // 从 SharedPreferences 读取已安装工具列表
+                val prefs = context.getSharedPreferences("codex_setup_prefs", android.content.Context.MODE_PRIVATE)
+                val installedSet = prefs.getStringSet("installed_tools", emptySet()) ?: emptySet()
+                installedSet.forEach { available.add(it) }
+                available
+            } else emptyList()
+        }.getOrDefault(emptyList())
+
+        val envSection = if (hasProot) {
+            """
+Linux 环境：✅ Ubuntu proot 已就绪
+- 可用命令：apt-get, python3, pip3, node, npm, git, vim, curl, wget, gcc, make 等
+- 已安装工具：${if (installedTools.isNotEmpty()) installedTools.joinToString(", ") else "通过 apt-get install 按需安装"}
+- 使用 shell 工具时，Linux 命令会自动通过 proot 执行
+- 可直接执行：python3 script.py、npm install、git clone、gcc main.c 等
+"""
+        } else {
+            """
+Linux 环境：❌ 未安装（仅 Android Shell 可用）
+- 只能使用 Android 基础命令（ls, cat, grep, find, cp, mv 等）
+- 如需完整开发工具链，请引导用户到「设置 → 环境」安装 Ubuntu proot
+"""
+        }
+
+        val toolList = toolRegistry.keys.joinToString("
+- ", prefix = "- ")
+
         return """你是一个运行在 Android 设备上的 AI 编程助手（Codex Agent）。
-你可以执行 Shell 命令、读写文件来帮助用户完成编程任务。
+你可以执行 Shell 命令、读写文件、搜索代码来帮助用户完成编程任务。
 
 当前环境信息：
 - 设备: Android ${android.os.Build.VERSION.RELEASE} (API ${android.os.Build.VERSION.SDK_INT})
 - 架构: ${android.os.Build.SUPPORTED_ABIS?.firstOrNull() ?: "unknown"}
 - 工作目录: ${context.filesDir.absolutePath}
-
+$envSection
 可用工具：
-- shell: 执行 Shell 命令
-- file_read: 读取文件内容
-- file_write: 写入文件内容
+$toolList
 
-注意事项：
-- 在 Android 上，部分 Shell 命令可能受限
-- 优先使用标准 Linux 命令
-- 如果需要开发工具（Node.js/Python/Git），引导用户到"环境"页面安装
-- 用中文回复"""
+执行策略：
+${if (hasProot) "- 优先使用 proot Linux 环境执行开发相关命令" else "- 当前仅 Android Shell，避免使用 Linux 特有命令"}
+- file_read/file_write 用于精确的文件操作，shell 用于批量操作
+- search 用于查找文件和代码内容
+- 危险命令（rm -rf、dd 等）执行前需提醒用户
+
+请用中文回复。"""
     }
 
     /** 工具调用累积器 */
