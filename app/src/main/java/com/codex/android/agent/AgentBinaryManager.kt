@@ -414,7 +414,7 @@ class AgentBinaryManager(private val context: Context) {
             .apply()
 
         onProgress(InstallProgress(InstallPhase.COMPLETED, 1f, "${def.displayName} 安装完成!"))
-        true
+        return true
     }
 
     // ===== 配置 =====
