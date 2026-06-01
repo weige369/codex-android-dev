@@ -405,7 +405,7 @@ class AgentOrchestrator(private val context: Context) {
         }
     }
 
-    private fun checkBinaryInProot(name: String): Boolean {
+    private suspend fun checkBinaryInProot(name: String): Boolean {
         return try {
             val linuxEnv = com.codex.android.util.LinuxEnvironment(context)
             val result = linuxEnv.runCommand("which $name", 5_000)
