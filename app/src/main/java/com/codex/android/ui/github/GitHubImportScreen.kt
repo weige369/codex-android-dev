@@ -19,6 +19,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.codex.android.codex.github.GitHubApiClient
+import com.codex.android.data.preferences.GitHubAuthPreferences
+import android.content.Intent
+import android.net.Uri as AndroidUri
 import kotlinx.coroutines.launch
 
 /**
@@ -54,6 +57,9 @@ fun GitHubImportScreen(
     var isLoading by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var currentUser by remember { mutableStateOf<GitHubApiClient.GitHubUser?>(null) }
+    val authPrefs = remember { GitHubAuthPreferences.getInstance(context) }
+    val isLoggedIn by authPrefs.isLoggedInFlow.collectAsState(initial = false)
+    val authUserInfo by authPrefs.userInfoFlow.collectAsState(initial = null)
 
     // 初始加载
     LaunchedEffect(Unit) {
@@ -108,6 +114,53 @@ fun GitHubImportScreen(
                 }
                 Tab(selected = activeTab == 2, onClick = { activeTab = 2 }) {
                     TabText("搜索")
+                }
+            }
+
+            // GitHub Auth Status Bar
+            if (isLoggedIn && authUserInfo != null) {
+                Card(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFF1B5E20).copy(alpha = 0.15f))
+                ) {
+                    Row(
+                        modifier = Modifier.padding(12.dp).fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(Icons.Default.CheckCircle, null, tint = Color(0xFF4CAF50), modifier = Modifier.size(20.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text("${authUserInfo!!.login}", fontWeight = FontWeight.Bold, fontSize = 14.sp, modifier = Modifier.weight(1f))
+                        TextButton(onClick = {
+                            scope.launch { authPrefs.logout() }
+                            currentUser = null
+                            userRepos = emptyList()
+                        }) {
+                            Text("登出", fontSize = 12.sp, color = Color(0xFFEF5350))
+                        }
+                    }
+                }
+            } else {
+                Card(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(12.dp).fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(Icons.Default.Login, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text("未登录 GitHub", fontSize = 14.sp, modifier = Modifier.weight(1f))
+                        Button(onClick = {
+                            scope.launch {
+                                val authUrl = authPrefs.getAuthorizationUrlWithPKCE()
+                                val intent = Intent(Intent.ACTION_VIEW, AndroidUri.parse(authUrl))
+                                context.startActivity(intent)
+                            }
+                        }) {
+                            Text("GitHub 登录", fontSize = 13.sp)
+                        }
+                    }
                 }
             }
 
