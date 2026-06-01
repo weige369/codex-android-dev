@@ -44,6 +44,32 @@ class LinuxEnvironment(private val context: Context) {
             "https://cdimage.ubuntu.com/ubuntu-base/releases/24.04/release/ubuntu-base-24.04.4-base-arm64.tar.gz"
         )
 
+        private val ALPINE_ROOTFS_MIRRORS = listOf(
+            "https://mirrors.tuna.tsinghua.edu.cn/alpine/v3.19/releases/aarch64/alpine-minirootfs-3.19.1-aarch64.tar.gz",
+            "https://mirrors.aliyun.com/alpine/v3.19/releases/aarch64/alpine-minirootfs-3.19.1-aarch64.tar.gz",
+            "https://mirrors.ustc.edu.cn/alpine/v3.19/releases/aarch64/alpine-minirootfs-3.19.1-aarch64.tar.gz",
+            "https://dl-cdn.alpinelinux.org/alpine/v3.19/releases/aarch64/alpine-minirootfs-3.19.1-aarch64.tar.gz"
+        )
+
+        // Debian rootfs — 使用 debootstrap 风格的最小 tarball（非 ISO）
+        private val DEBIAN_ROOTFS_MIRRORS = listOf(
+            "https://mirrors.tuna.tsinghua.edu.cn/debian-cd/current/arm64/iso-cd/debian-12.5.0-arm64-netinst.iso",
+            "https://mirrors.aliyun.com/debian-cd/current/arm64/iso-cd/debian-12.5.0-arm64-netinst.iso"
+        )
+
+        // 各发行版元信息
+        private val DISTRO_META = mapOf(
+            "ubuntu" to DistroMeta("Ubuntu 24.04", "ubuntu-base.tar.gz", ROOTFS_MIRRORS),
+            "alpine" to DistroMeta("Alpine 3.19", "alpine-minirootfs.tar.gz", ALPINE_ROOTFS_MIRRORS),
+            "debian" to DistroMeta("Debian 12", "debian-base.tar.gz", DEBIAN_ROOTFS_MIRRORS)
+        )
+
+        data class DistroMeta(
+            val displayName: String,
+            val archiveName: String,
+            val mirrors: List<String>
+        )
+
         private const val CONNECT_TIMEOUT_MS = 10_000
     }
 
@@ -192,10 +218,12 @@ class LinuxEnvironment(private val context: Context) {
     }
 
     suspend fun installRootfs(
+        distro: String = "ubuntu",
         onProgress: ((Long, Long) -> Unit)? = null,
         onStatus: ((String) -> Unit)? = null
     ): Boolean = withContext(Dispatchers.IO) {
         try {
+            val meta = DISTRO_META[distro] ?: DISTRO_META["ubuntu"]!!
             val rootfs = getRootfsDir()
             if (rootfs.isDirectory()) {
                 onStatus?.invoke("清理旧的 rootfs...")
@@ -203,11 +231,11 @@ class LinuxEnvironment(private val context: Context) {
             }
             rootfs.mkdirs()
 
-            val archive = File(context.cacheDir, ROOTFS_ARCHIVE)
+            val archive = File(context.cacheDir, meta.archiveName)
 
-            onStatus?.invoke("下载 Ubuntu rootfs (~37MB)...")
+            onStatus?.invoke("下载 ${meta.displayName} rootfs...")
             var downloaded = false
-            for (mirror in ROOTFS_MIRRORS) {
+            for (mirror in meta.mirrors) {
                 onStatus?.invoke("尝试镜像: $mirror")
                 try {
                     val conn = URL(mirror).openConnection() as HttpURLConnection
@@ -256,7 +284,7 @@ class LinuxEnvironment(private val context: Context) {
             archive.delete()
 
             if (isRootfsValid()) {
-                onStatus?.invoke("Ubuntu rootfs 安装成功!")
+                onStatus?.invoke("${meta.displayName} rootfs 安装成功!")
                 setupRootfs(rootfs)
                 // 预装基础系统工具（git/curl/wget/ca-certificates 等）
                 installBaseSystemTools()
@@ -381,30 +409,49 @@ class LinuxEnvironment(private val context: Context) {
     private suspend fun installBaseSystemTools() {
         try {
             Log.i(TAG, "预装基础系统工具...")
-            runCommand("apt-get update -qq 2>&1", 60_000)
+            // 检测发行版：Alpine 用 apk，其他用 apt
+            val osRelease = File(getRootfsDir(), "etc/os-release")
+            val isAlpine = osRelease.exists() && osRelease.readText().contains("Alpine", ignoreCase = true)
 
-            val baseTools = listOf(
-                "ca-certificates",  // HTTPS 证书
-                "curl",             // HTTP 客户端
-                "wget",             // 下载工具
-                "git",              // 版本管理
-                "unzip",            // 解压
-                "vim-tiny",         // 最小编辑器
-                "locales"           // locale 支持
-            )
-
-            val installCmd = "DEBIAN_FRONTEND=noninteractive apt-get install -y -qq " +
-                baseTools.joinToString(" ") + " 2>&1"
-
-            val result = runCommand(installCmd, 300_000)
-            if (result.exitCode == 0) {
-                Log.i(TAG, "基础系统工具安装完成")
+            if (isAlpine) {
+                // Alpine: apk 包管理
+                runCommand("apk update 2>&1", 60_000)
+                val alpineTools = listOf(
+                    "ca-certificates", "curl", "wget", "git", "unzip", "vim", "musl-locales"
+                )
+                val result = runCommand("apk add --no-cache " + alpineTools.joinToString(" ") + " 2>&1", 300_000)
+                if (result.exitCode == 0) {
+                    Log.i(TAG, "Alpine 基础系统工具安装完成")
+                } else {
+                    Log.w(TAG, "部分 Alpine 工具安装失败: ${result.stderr.take(200)}")
+                }
             } else {
-                Log.w(TAG, "部分基础工具安装失败: ${result.stderr.take(200)}")
-            }
+                // Debian/Ubuntu: apt 包管理
+                runCommand("apt-get update -qq 2>&1", 60_000)
 
-            // 配置 locale
-            runCommand("locale-gen en_US.UTF-8 2>&1", 10_000)
+                val baseTools = listOf(
+                    "ca-certificates",  // HTTPS 证书
+                    "curl",             // HTTP 客户端
+                    "wget",             // 下载工具
+                    "git",              // 版本管理
+                    "unzip",            // 解压
+                    "vim-tiny",         // 最小编辑器
+                    "locales"           // locale 支持
+                )
+
+                val installCmd = "DEBIAN_FRONTEND=noninteractive apt-get install -y -qq " +
+                    baseTools.joinToString(" ") + " 2>&1"
+
+                val result = runCommand(installCmd, 300_000)
+                if (result.exitCode == 0) {
+                    Log.i(TAG, "基础系统工具安装完成")
+                } else {
+                    Log.w(TAG, "部分基础工具安装失败: ${result.stderr.take(200)}")
+                }
+
+                // 配置 locale
+                runCommand("locale-gen en_US.UTF-8 2>&1", 10_000)
+            }
         } catch (e: Exception) {
             Log.w(TAG, "预装基础工具失败（非致命）", e)
         }
@@ -414,7 +461,10 @@ class LinuxEnvironment(private val context: Context) {
         try {
             val rootfs = getRootfsDir()
             if (rootfs.isDirectory()) rootfs.deleteRecursively()
-            File(context.cacheDir, ROOTFS_ARCHIVE).delete()
+            // 清理所有发行版归档
+            DISTRO_META.values.forEach { meta ->
+                File(context.cacheDir, meta.archiveName).delete()
+            }
             true
         } catch (e: Exception) {
             Log.e(TAG, "卸载 rootfs 失败", e)
