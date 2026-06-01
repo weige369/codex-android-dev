@@ -2,6 +2,8 @@ package com.ai.assistance.operit.data.preferences
 
 import android.content.Context
 import android.net.Uri
+import android.util.Base64
+import android.util.Log
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
@@ -17,6 +19,10 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import java.net.HttpURLConnection
+import java.net.URL
+import java.security.MessageDigest
+import java.security.SecureRandom
 
 private val Context.githubAuthDataStore: DataStore<Preferences> by
     preferencesDataStore(name = "github_auth_preferences")
@@ -36,14 +42,21 @@ data class GitHubUser(
 
 /**
  * GitHub认证偏好设置管理器
- * 负责管理GitHub OAuth认证状态、用户信息和访问令牌
+ * 负责管理GitHub OAuth PKCE认证状态、用户信息和访问令牌
+ *
+ * PKCE (Proof Key for Code Exchange) 流程：
+ * 1. 生成 code_verifier + code_challenge (S256)
+ * 2. 授权 URL 包含 code_challenge
+ * 3. 回调时用 code + code_verifier 换取 token（无需 client_secret）
  */
 class GitHubAuthPreferences(private val context: Context) {
 
     companion object {
+        private const val TAG = "GitHubAuth"
+
         // GitHub OAuth相关配置
         val GITHUB_CLIENT_ID = BuildConfig.GITHUB_CLIENT_ID
-        // GITHUB_CLIENT_SECRET removed (R-2): PKCE flow does not require client secret
+        // R-2 fix: client_secret removed — PKCE flow does not require client secret
         const val GITHUB_SCOPE = "notifications,public_repo,user:email,read:user"
         private const val REQUIRED_AUTH_VERSION = 2
         private const val GITHUB_REDIRECT_SCHEME = "codex"
@@ -61,6 +74,7 @@ class GitHubAuthPreferences(private val context: Context) {
         private val AUTH_VERSION = longPreferencesKey("auth_version")
         private val GRANTED_SCOPE = stringPreferencesKey("granted_scope")
         private val PENDING_OAUTH_STATE = stringPreferencesKey("pending_oauth_state")
+        private val PENDING_CODE_VERIFIER = stringPreferencesKey("pending_code_verifier")
         
         @Volatile
         private var INSTANCE: GitHubAuthPreferences? = null
@@ -76,6 +90,28 @@ class GitHubAuthPreferences(private val context: Context) {
             return (1..32)
                 .map { chars.random() }
                 .joinToString("")
+        }
+
+        /**
+         * 生成 PKCE code_verifier (43-128 字符的随机字符串)
+         * RFC 7636: 使用 unreserved chars [A-Z] / [a-z] / [0-9] / "-" / "." / "_" / "~"
+         */
+        fun generateCodeVerifier(): String {
+            val random = SecureRandom()
+            val chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~"
+            return (1..64)  // 64 字符，在 43-128 范围内
+                .map { chars[random.nextInt(chars.length)] }
+                .joinToString("")
+        }
+
+        /**
+         * 计算 PKCE code_challenge (S256 方法)
+         * code_challenge = BASE64URL(SHA256(code_verifier))
+         */
+        fun computeCodeChallenge(codeVerifier: String): String {
+            val digest = MessageDigest.getInstance("SHA-256")
+            val hash = digest.digest(codeVerifier.toByteArray(Charsets.US_ASCII))
+            return Base64.encodeToString(hash, Base64.URL_SAFE or Base64.NO_PADDING or Base64.NO_WRAP)
         }
 
         fun isOAuthRedirectUri(uri: Uri?): Boolean {
@@ -274,17 +310,163 @@ class GitHubAuthPreferences(private val context: Context) {
     }
 
     /**
-     * 生成GitHub OAuth授权URL
+     * 保存 PKCE code_verifier（启动授权时调用）
      */
-    fun getAuthorizationUrl(state: String = createOAuthState()): String {
+    suspend fun saveCodeVerifier(codeVerifier: String) {
+        context.githubAuthDataStore.edit { preferences ->
+            preferences[PENDING_CODE_VERIFIER] = codeVerifier
+        }
+    }
+
+    /**
+     * 消费 PKCE code_verifier（token exchange 时调用，用后即焚）
+     */
+    suspend fun consumeCodeVerifier(): String? {
+        val preferences = context.githubAuthDataStore.data.first()
+        val verifier = preferences[PENDING_CODE_VERIFIER]
+        context.githubAuthDataStore.edit { mutablePreferences ->
+            mutablePreferences.remove(PENDING_CODE_VERIFIER)
+        }
+        return verifier
+    }
+
+    /**
+     * 生成GitHub OAuth PKCE授权URL
+     *
+     * PKCE 流程（RFC 7636）：
+     * 1. 生成随机 code_verifier
+     * 2. 计算 code_challenge = BASE64URL(SHA256(code_verifier))
+     * 3. 授权 URL 包含 code_challenge + code_challenge_method=S256
+     * 4. 回调时用 code_verifier 换取 token（无需 client_secret）
+     */
+    suspend fun getAuthorizationUrlWithPKCE(state: String = createOAuthState()): String {
+        val codeVerifier = generateCodeVerifier()
+        val codeChallenge = computeCodeChallenge(codeVerifier)
+
+        // 保存 state 和 code_verifier 供回调时验证
+        setPendingOAuthState(state)
+        saveCodeVerifier(codeVerifier)
+
+        Log.d(TAG, "PKCE: code_verifier length=${codeVerifier.length}, code_challenge length=${codeChallenge.length}")
+
         return Uri.parse("https://github.com/login/oauth/authorize")
             .buildUpon()
             .appendQueryParameter("client_id", GITHUB_CLIENT_ID)
             .appendQueryParameter("redirect_uri", GITHUB_REDIRECT_URI)
             .appendQueryParameter("scope", GITHUB_SCOPE)
             .appendQueryParameter("state", state)
+            .appendQueryParameter("code_challenge", codeChallenge)
+            .appendQueryParameter("code_challenge_method", "S256")
             .build()
             .toString()
+    }
+
+    /**
+     * 生成GitHub OAuth授权URL（兼容旧调用方，内部走 PKCE）
+     */
+    suspend fun getAuthorizationUrl(state: String = createOAuthState()): String {
+        return getAuthorizationUrlWithPKCE(state)
+    }
+
+    /**
+     * 用 PKCE 方式交换 authorization code 获取 access token。
+     *
+     * POST https://github.com/login/oauth/access_token
+     * Body: client_id + code + code_verifier + redirect_uri
+     * 不需要 client_secret（PKCE 用 code_verifier 替代）
+     *
+     * @param code OAuth 回调返回的 authorization code
+     * @param state OAuth 回调返回的 state（用于验证 CSRF）
+     * @return exchange 结果
+     */
+    suspend fun exchangeCodeForToken(code: String, state: String): ExchangeResult {
+        // 验证 state 防止 CSRF
+        val pendingState = consumePendingOAuthState()
+        if (pendingState != state) {
+            Log.e(TAG, "OAuth state mismatch: expected=$pendingState, got=$state")
+            return ExchangeResult.Error("Security: state mismatch, possible CSRF attack")
+        }
+
+        // 获取 code_verifier
+        val codeVerifier = consumeCodeVerifier()
+        if (codeVerifier == null) {
+            Log.e(TAG, "PKCE code_verifier not found")
+            return ExchangeResult.Error("PKCE code_verifier not found, please retry login")
+        }
+
+        return try {
+            val url = URL("https://github.com/login/oauth/access_token")
+            val conn = url.openConnection() as HttpURLConnection
+            conn.requestMethod = "POST"
+            conn.setRequestProperty("Accept", "application/json")
+            conn.setRequestProperty("Content-Type", "application/json")
+            conn.connectTimeout = 15_000
+            conn.readTimeout = 15_000
+            conn.doOutput = true
+
+            // PKCE: 不需要 client_secret，用 code_verifier 替代
+            val body = """{"client_id":"$GITHUB_CLIENT_ID","code":"$code","code_verifier":"$codeVerifier","redirect_uri":"$GITHUB_REDIRECT_URI"}"""
+
+            conn.outputStream.use { os ->
+                os.write(body.toByteArray(Charsets.UTF_8))
+                os.flush()
+            }
+
+            val responseCode = conn.responseCode
+            val responseBody = if (responseCode in 200..299) {
+                conn.inputStream.bufferedReader().readText()
+            } else {
+                conn.errorStream?.bufferedReader()?.readText() ?: ""
+            }
+            conn.disconnect()
+
+            if (responseCode !in 200..299) {
+                Log.e(TAG, "Token exchange failed: HTTP $responseCode - $responseBody")
+                return ExchangeResult.Error("Token exchange failed: HTTP $responseCode")
+            }
+
+            val jsonResp = org.json.JSONObject(responseBody)
+            val error = jsonResp.optString("error", "")
+            if (error.isNotEmpty()) {
+                val errorDesc = jsonResp.optString("error_description", error)
+                Log.e(TAG, "Token exchange error: $error - $errorDesc")
+                return ExchangeResult.Error(errorDesc)
+            }
+
+            val accessToken = jsonResp.getString("access_token")
+            val tokenType = jsonResp.optString("token_type", "bearer")
+            val expiresIn = jsonResp.optLong("expires_in", -1).let { if (it > 0) it else null }
+            val refreshToken = jsonResp.optString("refresh_token", null)
+            val grantedScope = jsonResp.optString("scope", "")
+
+            Log.i(TAG, "PKCE token exchange success, scope: $grantedScope")
+
+            ExchangeResult.Success(
+                accessToken = accessToken,
+                tokenType = tokenType,
+                expiresIn = expiresIn,
+                refreshToken = refreshToken,
+                grantedScope = grantedScope
+            )
+        } catch (e: Exception) {
+            Log.e(TAG, "Token exchange exception", e)
+            ExchangeResult.Error(e.message ?: "Unknown error")
+        }
+    }
+
+    /**
+     * Token exchange 结果
+     */
+    sealed class ExchangeResult {
+        data class Success(
+            val accessToken: String,
+            val tokenType: String,
+            val expiresIn: Long?,
+            val refreshToken: String?,
+            val grantedScope: String
+        ) : ExchangeResult()
+
+        data class Error(val message: String) : ExchangeResult()
     }
 
     /**
