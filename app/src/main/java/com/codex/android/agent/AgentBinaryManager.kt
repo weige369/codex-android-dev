@@ -347,7 +347,7 @@ class AgentBinaryManager(private val context: Context) {
     /**
      * 将下载的二进制安装到 proot 的 /usr/local/bin/。
      */
-    private fun installBinaryToProot(sourceFile: File, binaryName: String): Boolean {
+    private suspend fun installBinaryToProot(sourceFile: File, binaryName: String): Boolean {
         return try {
             val rootfs = linuxEnv.getRootfsDir()
             val binDir = File(rootfs, PROOT_BIN_DIR.removePrefix("/"))
@@ -464,15 +464,13 @@ class AgentBinaryManager(private val context: Context) {
                 onProgress(InstallProgress(InstallPhase.INSTALLING, 0.2f,
                     "apt 安装 Node.js 失败，尝试 nvm..."))
                 val nvmResult = linuxEnv.runCommand(
-                    buildString {
-                        append("export HOME=/root && ")
-                        append("if [ ! -d /root/.nvm ]; then ")
-                        append("curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash 2>&1; ")
-                        append("fi && ")
-                        append("export NVM_DIR="/root/.nvm" && ")
-                        append("[ -s "\$NVM_DIR/nvm.sh" ] && . "\$NVM_DIR/nvm.sh" && ")
-                        append("nvm install 22 && nvm use 22 && nvm alias default 22")
-                    },
+                    "export HOME=/root && " +
+                    "if [ ! -d /root/.nvm ]; then " +
+                    "curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash 2>&1; " +
+                    "fi && " +
+                    "export NVM_DIR=/root/.nvm && " +
+                    "[ -s \"\$NVM_DIR/nvm.sh\" ] && . \"\$NVM_DIR/nvm.sh\" && " +
+                    "nvm install 22 && nvm use 22 && nvm alias default 22",
                     600_000
                 )
 
