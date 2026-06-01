@@ -335,7 +335,7 @@ class SetupWizardViewModel : ViewModel() {
         _selectedTools.value = emptySet()
     }
 
-    fun installSelectedTools() {
+    fun installSelectedTools(ctx: android.content.Context) {
         val env = prootEnv ?: return
         val tools = _selectedTools.value
         if (tools.isEmpty()) return
@@ -353,7 +353,7 @@ class SetupWizardViewModel : ViewModel() {
             if (ok) {
                 _toolsInstallState.value = ToolsInstallState(isCompleted = true, message = "工具安装完成!")
                 // 持久化已安装工具列表，供 NativeAgentService 读取
-                saveInstalledTools(context, tools)
+                saveInstalledTools(ctx, tools)
             } else {
                 _toolsInstallState.value = ToolsInstallState(error = "部分工具安装失败")
             }
@@ -364,7 +364,7 @@ class SetupWizardViewModel : ViewModel() {
      * 将已安装的工具列表保存到 SharedPreferences。
      * NativeAgentService 在构建 system prompt 时会读取此列表。
      */
-    private fun saveInstalledTools(ctx: android.content.Context, tools: Set<String>) {
+    private fun saveInstalledTools(ctx: Context, tools: Set<String>) {
         val prefs = ctx.getSharedPreferences("codex_setup_prefs", android.content.Context.MODE_PRIVATE)
         prefs.edit().putStringSet("installed_tools", tools).apply()
         // 同时标记 Linux 已安装
