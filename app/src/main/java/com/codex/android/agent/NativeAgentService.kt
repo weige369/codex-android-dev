@@ -18,23 +18,18 @@ import okhttp3.sse.EventSources
 import org.json.JSONArray
 import org.json.JSONObject
 import java.util.concurrent.ConcurrentLinkedQueue
-import com.codex.android.agent.ToolCallBridge
-import com.codex.android.agent.ToolPermissionManager
-import com.codex.android.agent.PermissionDecision
 import java.util.concurrent.TimeUnit
 
 /**
- * 原生 AI Agent 服务。
+ * 原生 AI Agent 服务（v2 优化版）。
  *
- * 核心思路（学习 Operit EnhancedAIService）：
- * 不依赖任何外部二进制，直接在 Kotlin 进程内完成：
- * 1. 调用 OpenAI 兼容 API（流式 SSE）
- * 2. 维护对话历史
- * 3. 解析 AI 响应中的工具调用
- * 4. 执行工具并将结果回传 API
- * 5. 循环直到 AI 返回纯文本回复
- *
- * 这使得 Codex 在 Android 36 上无需 proot 即可工作。
+ * 核心改进（vs v1）：
+ * 1. 使用 SSEStreamParser 统一 SSE 解析，消除 sendPromptStream/sendPromptContinue ~200行重复代码
+ * 2. DeepSeek V4 reasoning_content 正确回传，修复多轮工具调用后 400 错误
+ * 3. 工具结果自动裁剪，避免超长输出导致 token 爆炸
+ * 4. 对话历史 token 估算 + 自动压缩
+ * 5. 集成 EndpointCompleter 自动补全 API 端点
+ * 6. HTTP 错误响应体日志增强
  */
 class NativeAgentService(private val context: Context) : ChatAgent {
 
@@ -46,8 +41,6 @@ class NativeAgentService(private val context: Context) : ChatAgent {
         private const val KEY_API_MODEL = "api_model"
         private const val KEY_PROVIDER_ID = "provider_id"
         private const val KEY_CUSTOM_URL = "custom_url"
-
-        /** Agent 连接状态 */
 
         /** 单例 */
         @Volatile private var INSTANCE: NativeAgentService? = null
@@ -113,63 +106,33 @@ class NativeAgentService(private val context: Context) : ChatAgent {
     // ===== 对话历史 =====
 
     private val conversationHistory = ConcurrentLinkedQueue<JSONObject>()
+    private val compactor = ConversationCompactor(context)
+
+    /** 当前轮次的思考内容（DeepSeek V4 reasoning_content） */
+    @Volatile private var currentThinkingContent: String = ""
 
     fun clearHistory() {
         conversationHistory.clear()
+        currentThinkingContent = ""
     }
 
     // ===== 工具注册 =====
 
-    /**
-     * 能力设备注册表。
-     *
-     * 借鉴 BentOS 的 /dev/ 设备模型：
-     * - 设备必须被"挂载"(mount)才能使用
-     * - 未挂载的设备结构性不可访问（LLM 根本不知道它的存在）
-     * - 每个设备有明确的权限级别（SAFE/MODERATE/ELEVATED/PRIVILEGED）
-     * - 运行时动态挂载/卸载（如 proot 安装后自动挂载 Linux Shell）
-     */
     private val capabilityRegistry = CapabilityRegistry(context)
-
-    /**
-     * 工具权限管理器（运行时安全：决定工具是否可以执行）
-     * 与 CapabilityRegistry 配合：
-     * - CapabilityRegistry 管理设备挂载（结构性安全，决定工具是否暴露给 LLM）
-     * - ToolPermissionManager 管理工具执行权限（运行时安全，决定工具是否可以执行）
-     */
     private val permissionManager = ToolPermissionManager.getInstance(context)
 
-    /** 获取权限管理器（供 UI 层展示权限弹窗） */
     fun getPermissionManager(): ToolPermissionManager = permissionManager
-
-    /**
-     * 获取能力设备注册表（供 UI 层查询设备状态/权限）。
-     */
     fun getCapabilityRegistry(): CapabilityRegistry = capabilityRegistry
 
-    /**
-     * 挂载所有可用设备（替代原 registerDefaultTools + registerEnvironmentAwareTools）。
-     *
-     * CapabilityRegistry.autoMount() 会：
-     * 1. 自动挂载 SAFE 级别设备
-     * 2. 如果用户已授权 MODERATE，自动挂载 MODERATE 设备
-     * 3. 如果 proot 已就绪，自动挂载 Linux Shell 设备
-     */
     suspend fun mountCapabilities() {
         capabilityRegistry.autoMount()
     }
 
-    /**
-     * 授权权限级别并尝试挂载对应设备。
-     */
     suspend fun grantPermissionAndMount(level: PermissionLevel) {
         capabilityRegistry.grantLevel(level)
         capabilityRegistry.autoMount()
     }
 
-    /**
-     * 一键授权 MODERATE 权限（Shell、文件写入等）。
-     */
     suspend fun grantModerateAccess() {
         capabilityRegistry.grantModerateAccess()
         capabilityRegistry.autoMount()
@@ -179,13 +142,15 @@ class NativeAgentService(private val context: Context) : ChatAgent {
         return capabilityRegistry.getToolDefinitions()
     }
 
-    // ===== 核心：发送消息 =====
+    // ===== 核心：发送消息（使用 SSEStreamParser）=====
 
     private var currentEventSource: EventSource? = null
 
     /**
      * 发送消息并获取流式响应。
-     * 回调在 IO 线程执行，UI 层需要切线程。
+     *
+     * v2: 统一使用 SSEStreamParser，消除 sendPromptStream + sendPromptContinue 重复代码。
+     * 所有流式请求走同一个 streamRequest() 方法，工具调用后递归回调。
      */
     override fun sendPromptStream(
         prompt: String,
@@ -199,24 +164,42 @@ class NativeAgentService(private val context: Context) : ChatAgent {
             return
         }
 
+        // 添加用户消息到历史
+        conversationHistory.add(JSONObject().apply {
+            put("role", "user")
+            put("content", prompt)
+        })
+
+        // 检查历史是否需要压缩
+        val messagesForCheck = buildMessagesArray()
+        if (compactor.estimateTokens(messagesForCheck) > ConversationCompactor.COMPACTION_THRESHOLD_TOKENS) {
+            compressHistory()
+        }
+
+        // 重置思考内容
+        currentThinkingContent = ""
+
+        // 发起流式请求
+        streamRequest(onChunk, onComplete, onError)
+    }
+
+    /**
+     * 统一的流式请求方法。
+     *
+     * 替代 v1 中 sendPromptStream 和 sendPromptContinue 两个几乎相同的方法。
+     * 使用 SSEStreamParser 统一处理 SSE 解析。
+     */
+    private fun streamRequest(
+        onChunk: (String) -> Unit,
+        onComplete: (String) -> Unit,
+        onError: (String) -> Unit
+    ) {
+        val apiKey = getApiKey()
         val apiUrl = getApiUrl().trimEnd('/')
         val model = getApiModel()
 
-        // 添加用户消息到历史
-        val userMsg = JSONObject().apply {
-            put("role", "user")
-            put("content", prompt)
-        }
-        conversationHistory.add(userMsg)
-
-        // 构建请求体
-        val messagesArray = JSONArray()
-        // System prompt
-        messagesArray.put(JSONObject().apply {
-            put("role", "system")
-            put("content", buildSystemPrompt())
-        })
-        conversationHistory.forEach { messagesArray.put(it) }
+        // 构建 messages
+        val messagesArray = buildMessagesArray()
 
         val requestBody = JSONObject().apply {
             put("model", model)
@@ -228,7 +211,7 @@ class NativeAgentService(private val context: Context) : ChatAgent {
             }
         }
 
-        Log.i(TAG, "发送 API 请求: $model @ $apiUrl")
+        Log.i(TAG, "发送 API 请求: $model @ $apiUrl (历史 ${conversationHistory.size} 条)")
 
         val request = Request.Builder()
             .url("$apiUrl/chat/completions")
@@ -240,76 +223,52 @@ class NativeAgentService(private val context: Context) : ChatAgent {
 
         _connectionState.value = AgentConnectionState.STREAMING
 
+        // SSEStreamParser 统一解析
+        val parser = SSEStreamParser(
+            tag = TAG,
+            onContent = { content -> onChunk(content) },
+            onToolCall = { toolCalls ->
+                scope.launch {
+                    handleToolCalls(toolCalls, onChunk, onComplete, onError)
+                }
+            },
+            onComplete = { fullContent, _ ->
+                // 将助手回复加入历史
+                conversationHistory.add(JSONObject().apply {
+                    put("role", "assistant")
+                    put("content", fullContent)
+                })
+                _connectionState.value = AgentConnectionState.CONNECTED
+                onComplete(fullContent)
+            },
+            onError = { error ->
+                Log.e(TAG, "SSE 错误: $error")
+                _connectionState.value = AgentConnectionState.ERROR
+                onError(error)
+            },
+            detectXmlToolCalls = true
+        )
+
         val factory = EventSources.createFactory(client)
         currentEventSource = factory.newEventSource(request, object : EventSourceListener() {
-            private val contentBuilder = StringBuilder()
-            private var toolCalls = mutableListOf<ToolCallAccumulator>()
-            private var finishReason: String? = null
-
             override fun onOpen(eventSource: EventSource, response: Response) {
-                Log.i(TAG, "API 流连接已打开")
-                _connectionState.value = AgentConnectionState.CONNECTED
+                Log.i(TAG, "SSE 连接已打开")
             }
 
             override fun onEvent(eventSource: EventSource, id: String?, type: String?, data: String) {
-                if (data == "[DONE]") {
-                    // 处理完成
-                    val fullContent = contentBuilder.toString()
+                // 委托给 SSEStreamParser
+                parser.onEvent(eventSource, id, type, data)
 
-                    if (finishReason == "tool_calls" && toolCalls.isNotEmpty()) {
-                        // AI 请求调用工具
-                        scope.launch {
-                            handleToolCalls(toolCalls, onChunk, onComplete, onError)
+                // 额外提取 reasoning_content（DeepSeek V4）
+                if (data != "[DONE]") {
+                    try {
+                        val json = JSONObject(data)
+                        val delta = json.optJSONArray("choices")
+                            ?.optJSONObject(0)?.optJSONObject("delta")
+                        delta?.optString("reasoning_content", "")?.takeIf { it.isNotEmpty() }?.let {
+                            currentThinkingContent += it
                         }
-                    } else {
-                        // 纯文本回复，完成
-                        conversationHistory.add(JSONObject().apply {
-                            put("role", "assistant")
-                            put("content", fullContent)
-                        })
-                        _connectionState.value = AgentConnectionState.CONNECTED
-                        onComplete(fullContent)
-                    }
-                    return
-                }
-
-                try {
-                    val json = JSONObject(data)
-                    val choices = json.optJSONArray("choices")
-                    if (choices != null && choices.length() > 0) {
-                        val choice = choices.getJSONObject(0)
-                        val delta = choice.optJSONObject("delta")
-                        finishReason = choice.optString("finish_reason", null)
-
-                        if (delta != null) {
-                            // 文本内容
-                            val content = delta.optString("content", "")
-                            if (content.isNotEmpty()) {
-                                contentBuilder.append(content)
-                                onChunk(content)
-                            }
-
-                            // 工具调用
-                            val toolCallsDelta = delta.optJSONArray("tool_calls")
-                            if (toolCallsDelta != null) {
-                                for (i in 0 until toolCallsDelta.length()) {
-                                    val tc = toolCallsDelta.getJSONObject(i)
-                                    val idx = tc.optInt("index", 0)
-                                    while (toolCalls.size <= idx) {
-                                        toolCalls.add(ToolCallAccumulator())
-                                    }
-                                    val acc = toolCalls[idx]
-                                    tc.optJSONObject("function")?.let { fn ->
-                                        fn.optString("name", "").takeIf { it.isNotEmpty() }?.let { acc.name = it }
-                                        fn.optString("arguments", "").let { acc.argumentsBuilder.append(it) }
-                                    }
-                                    tc.optString("id", "").takeIf { it.isNotEmpty() }?.let { acc.id = it }
-                                }
-                            }
-                        }
-                    }
-                } catch (e: Exception) {
-                    Log.w(TAG, "SSE 解析错误: ${e.message}")
+                    } catch (_: Exception) {}
                 }
             }
 
@@ -328,15 +287,46 @@ class NativeAgentService(private val context: Context) : ChatAgent {
             }
 
             override fun onClosed(eventSource: EventSource) {
-                Log.i(TAG, "API 流已关闭")
                 _connectionState.value = AgentConnectionState.DISCONNECTED
             }
         })
     }
 
     /**
-     * 处理 AI 的工具调用请求。
-     * 执行工具后将结果回传 API，继续对话循环。
+     * 构建 OpenAI API messages 数组。
+     *
+     * v2 改进：
+     * - 自动裁剪过长的工具结果
+     * - DeepSeek reasoning_content 正确回传
+     */
+    private fun buildMessagesArray(): JSONArray {
+        val messages = JSONArray()
+
+        // System prompt
+        messages.put(JSONObject().apply {
+            put("role", "system")
+            put("content", buildSystemPrompt())
+        })
+
+        // 遍历历史，构建消息
+        val rawMessages = JSONArray()
+        conversationHistory.forEach { rawMessages.put(it) }
+
+        // 使用 compactor 裁剪工具结果
+        val trimmed = compactor.trimToolResults(rawMessages)
+        for (i in 0 until trimmed.length()) {
+            messages.put(trimmed.optJSONObject(i))
+        }
+
+        return messages
+    }
+
+    /**
+     * 处理工具调用。
+     *
+     * v2 改进：
+     * - DeepSeek V4 修复：assistant 消息需要回传 reasoning_content
+     * - 工具结果自动裁剪
      */
     private suspend fun handleToolCalls(
         toolCalls: List<ToolCallAccumulator>,
@@ -345,9 +335,15 @@ class NativeAgentService(private val context: Context) : ChatAgent {
         onError: (String) -> Unit
     ) {
         // 将 AI 的工具调用消息加入历史
+        // DeepSeek V4 修复：如果有 reasoning_content，需要回传
         val assistantMsg = JSONObject().apply {
             put("role", "assistant")
-            put("content", JSONObject.NULL)
+            // DeepSeek V4: reasoning_content 必须在 content 中回传，否则多轮后 400
+            if (currentThinkingContent.isNotBlank()) {
+                put("content", currentThinkingContent)
+            } else {
+                put("content", JSONObject.NULL)
+            }
             val tcArray = JSONArray()
             toolCalls.forEach { tc ->
                 tcArray.put(JSONObject().apply {
@@ -363,13 +359,16 @@ class NativeAgentService(private val context: Context) : ChatAgent {
         }
         conversationHistory.add(assistantMsg)
 
+        // 清空思考内容（已处理）
+        currentThinkingContent = ""
+
         // 逐个执行工具
         for (tc in toolCalls) {
             val toolName = tc.name
             val toolArgs = tc.argumentsBuilder.toString()
             Log.i(TAG, "执行工具: $toolName")
 
-            // 权限检查（ToolPermissionManager ALLOW/ASK/FORBID）
+            // 权限检查
             val device = capabilityRegistry.getMountedDeviceByName(toolName)
             val allowed = permissionManager.checkPermission(toolName, device)
             if (!allowed) {
@@ -382,13 +381,10 @@ class NativeAgentService(private val context: Context) : ChatAgent {
                 onChunk("🚫 权限不足: $toolName\n")
                 continue
             }
-            Log.i(TAG, "执行工具: $toolName")
 
             onChunk("\n🔧 执行工具: $toolName\n")
 
             val result = try {
-                // 通过 CapabilityRegistry 执行，结构性保证安全：
-                // 未挂载设备的工具根本不会被发送给 LLM，也不会被执行
                 capabilityRegistry.executeTool(toolName, toolArgs)
             } catch (e: Exception) {
                 Log.e(TAG, "工具 $toolName 执行失败", e)
@@ -402,132 +398,30 @@ class NativeAgentService(private val context: Context) : ChatAgent {
                 put("content", result)
             })
 
-            onChunk("📋 结果: ${result.take(500)}${if (result.length > 500) "..." else ""}\n")
+            // 裁剪显示
+            val displayResult = if (result.length > 500) result.take(500) + "..." else result
+            onChunk("📋 结果: $displayResult\n")
         }
 
-        // 重新发送请求，让 AI 处理工具结果
-        withContext(Dispatchers.Main) {
-            sendPromptContinue(onChunk, onComplete, onError)
+        // 重新发起请求（让 AI 处理工具结果）
+        withContext(Main) {
+            streamRequest(onChunk, onComplete, onError)
         }
     }
 
     /**
-     * 继续对话（工具调用后）
+     * 压缩对话历史（简单截断策略）。
+     * 保留系统消息 + 最近 6 条对话。
      */
-    private fun sendPromptContinue(
-        onChunk: (String) -> Unit,
-        onComplete: (String) -> Unit,
-        onError: (String) -> Unit
-    ) {
-        val apiKey = getApiKey()
-        val apiUrl = getApiUrl().trimEnd('/')
-        val model = getApiModel()
+    private fun compressHistory() {
+        val allItems = conversationHistory.toList()
+        conversationHistory.clear()
 
-        val messagesArray = JSONArray()
-        messagesArray.put(JSONObject().apply {
-            put("role", "system")
-            put("content", buildSystemPrompt())
-        })
-        conversationHistory.forEach { messagesArray.put(it) }
+        // 只保留最后 6 条（非系统消息）
+        val recentItems = allItems.takeLast(6)
+        recentItems.forEach { conversationHistory.add(it) }
 
-        val requestBody = JSONObject().apply {
-            put("model", model)
-            put("stream", true)
-            put("messages", messagesArray)
-            if (capabilityRegistry.getMountedToolNames().isNotEmpty()) {
-                put("tools", getToolDefinitions())
-            }
-        }
-
-        val request = Request.Builder()
-            .url("$apiUrl/chat/completions")
-            .addHeader("Authorization", "Bearer $apiKey")
-            .addHeader("Content-Type", "application/json")
-            .addHeader("Accept", "text/event-stream")
-            .post(requestBody.toString().toRequestBody("application/json".toMediaType()))
-            .build()
-
-        val factory = EventSources.createFactory(client)
-        currentEventSource = factory.newEventSource(request, object : EventSourceListener() {
-            private val contentBuilder = StringBuilder()
-            private var continueToolCalls = mutableListOf<ToolCallAccumulator>()
-            private var finishReason: String? = null
-
-            override fun onOpen(eventSource: EventSource, response: Response) {
-                Log.i(TAG, "继续对话流连接已打开")
-            }
-
-            override fun onEvent(eventSource: EventSource, id: String?, type: String?, data: String) {
-                if (data == "[DONE]") {
-                    val fullContent = contentBuilder.toString()
-                    if (finishReason == "tool_calls" && continueToolCalls.isNotEmpty()) {
-                        scope.launch {
-                            handleToolCalls(continueToolCalls, onChunk, onComplete, onError)
-                        }
-                    } else {
-                        conversationHistory.add(JSONObject().apply {
-                            put("role", "assistant")
-                            put("content", fullContent)
-                        })
-                        _connectionState.value = AgentConnectionState.CONNECTED
-                        onComplete(fullContent)
-                    }
-                    return
-                }
-                try {
-                    val json = JSONObject(data)
-                    val choices = json.optJSONArray("choices")
-                    if (choices != null && choices.length() > 0) {
-                        val choice = choices.getJSONObject(0)
-                        val delta = choice.optJSONObject("delta")
-                        finishReason = choice.optString("finish_reason", null)
-                        if (delta != null) {
-                            val content = delta.optString("content", "")
-                            if (content.isNotEmpty()) {
-                                contentBuilder.append(content)
-                                onChunk(content)
-                            }
-                            val tcDelta = delta.optJSONArray("tool_calls")
-                            if (tcDelta != null) {
-                                for (i in 0 until tcDelta.length()) {
-                                    val tc = tcDelta.getJSONObject(i)
-                                    val idx = tc.optInt("index", 0)
-                                    while (continueToolCalls.size <= idx) {
-                                        continueToolCalls.add(ToolCallAccumulator())
-                                    }
-                                    val acc = continueToolCalls[idx]
-                                    tc.optJSONObject("function")?.let { fn ->
-                                        fn.optString("name", "").takeIf { it.isNotEmpty() }?.let { acc.name = it }
-                                        fn.optString("arguments", "").let { acc.argumentsBuilder.append(it) }
-                                    }
-                                    tc.optString("id", "").takeIf { it.isNotEmpty() }?.let { acc.id = it }
-                                }
-                            }
-                        }
-                    }
-                } catch (e: Exception) {
-                    Log.w(TAG, "继续对话 SSE 解析错误: ${e.message}")
-                }
-            }
-
-            override fun onFailure(eventSource: EventSource, t: Throwable?, response: Response?) {
-                val errorMsg = when {
-                    response != null -> {
-                        val body = try { response.body?.string()?.take(500) } catch (_: Exception) { null }
-                        "HTTP ${response.code}: ${body ?: response.message}"
-                    }
-                    t != null -> "继续对话失败: ${t.message}"
-                    else -> "未知错误"
-                }
-                Log.e(TAG, errorMsg, t)
-                _connectionState.value = AgentConnectionState.ERROR
-                onError(errorMsg)
-            }
-
-            override fun onClosed(eventSource: EventSource) {
-                _connectionState.value = AgentConnectionState.DISCONNECTED
-            }
-        })
+        Log.i(TAG, "对话历史已压缩: ${allItems.size} → ${recentItems.size} 条")
     }
 
     override fun cancelStream() {
@@ -554,17 +448,10 @@ class NativeAgentService(private val context: Context) : ChatAgent {
         }
     }
 
-    /**
-     * 将服务标记为就绪（无需外部二进制）
-     */
-    /**
-     * 将服务标记为就绪。
-     * 使用 CapabilityRegistry 挂载所有可用设备。
-     */
     fun markReady() {
         scope.launch {
             mountCapabilities()
-            withContext(Dispatchers.Main) {
+            withContext(Main) {
                 _isReady.value = true
                 _connectionState.value = AgentConnectionState.CONNECTED
             }
@@ -580,16 +467,13 @@ class NativeAgentService(private val context: Context) : ChatAgent {
     // ===== 辅助 =====
 
     private fun buildSystemPrompt(): String {
-        // 动态检测环境状态
         val devEnv = com.codex.android.util.DevelopmentEnvironment(context)
         val envInfo = runCatching { devEnv.getSelfContainedLinuxInfo() }.getOrNull()
         val hasProot = envInfo?.state == com.codex.android.util.LinuxEnvironment.EngineState.READY
 
-        // 读取已安装工具列表
         val prefs = context.getSharedPreferences("codex_setup_prefs", android.content.Context.MODE_PRIVATE)
         val installedTools = prefs.getStringSet("installed_tools", emptySet()) ?: emptySet()
 
-        // 构建环境信息
         val envInfoText = if (hasProot) {
             val toolsList = if (installedTools.isNotEmpty()) installedTools.joinToString(", ") else "通过 apt-get install 按需安装"
             "Linux 环境: Ubuntu proot 已就绪\n" +
@@ -603,10 +487,8 @@ class NativeAgentService(private val context: Context) : ChatAgent {
             "- 如需完整开发工具链，请引导用户安装 Ubuntu proot"
         }
 
-        // 构建设备清单（BentOS 风格）
         val deviceManifest = capabilityRegistry.getDeviceManifest()
 
-        // 构建执行策略
         val strategyText = if (hasProot) {
             "- 优先使用 proot Linux 环境执行开发相关命令"
         } else {
@@ -636,12 +518,5 @@ class NativeAgentService(private val context: Context) : ChatAgent {
             appendLine()
             append("请用中文回复。")
         }
-    }
-
-    /** 工具调用累积器 */
-    private class ToolCallAccumulator {
-        var id: String = ""
-        var name: String = ""
-        val argumentsBuilder = StringBuilder()
     }
 }
