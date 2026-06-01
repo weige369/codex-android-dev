@@ -115,7 +115,7 @@ class DevelopmentEnvironment(val context: Context) {
         onStatus: ((String) -> Unit)? = null
     ): Boolean {
         val linuxEnv = LinuxEnvironment(context)
-        return linuxEnv.installRootfs(onProgress, onStatus)
+        return linuxEnv.installRootfs(onProgress = onProgress, onStatus = onStatus)
     }
 
     /**
