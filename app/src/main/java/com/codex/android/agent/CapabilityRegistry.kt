@@ -245,6 +245,14 @@ class CapabilityRegistry(private val context: Context) {
         return mountedDevices.values.map { it.toTool().name }
     }
 
+    /**
+     * 按工具名查找已挂载的设备。
+     * 用于 ToolPermissionManager 查询工具对应的设备信息。
+     */
+    fun getMountedDeviceByName(toolName: String): CapabilityDevice? {
+        return mountedDevices.values.find { it.toTool().name == toolName }
+    }
+
     // ========== 持久化 ==========
 
     private fun loadGrantedLevels() {
