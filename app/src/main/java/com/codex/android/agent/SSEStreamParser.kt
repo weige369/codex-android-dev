@@ -124,13 +124,15 @@ class SSEStreamParser(
             t != null -> "连接失败: ${t.message}"
             response != null -> {
                 val statusCode = response.code
+                val body = try { response.body?.string()?.take(500) } catch (_: Exception) { null }
                 when (statusCode) {
+                    400 -> "请求错误 (400): ${body ?: response.message}"
                     401 -> "API Key 无效 (401)"
                     403 -> "访问被拒绝 (403)"
-                    404 -> "API 端点不存在 (404)"
+                    404 -> "API 端点不存在 (404): ${body?.take(100) ?: response.message}"
                     429 -> "请求过于频繁 (429)"
-                    in 500..599 -> "服务器错误 ($statusCode)"
-                    else -> "HTTP $statusCode: ${response.message}"
+                    in 500..599 -> "服务器错误 ($statusCode): ${body?.take(100) ?: response.message}"
+                    else -> "HTTP $statusCode: ${body ?: response.message}"
                 }
             }
             else -> "未知错误"
