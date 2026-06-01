@@ -199,7 +199,7 @@ fun SetupWizardScreen(
                             onToggleTool = { viewModel.toggleTool(it) },
                             onSelectAll = { viewModel.selectAllTools() },
                             onClearAll = { viewModel.clearAllTools() },
-                            onInstall = { viewModel.installSelectedTools() },
+                            onInstall = { viewModel.installSelectedTools(context) },
                             estimatedSize = viewModel.estimateToolsSize()
                         )
                         4 -> AIConfigStep(
