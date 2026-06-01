@@ -8,6 +8,7 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
+import okhttp3.MediaType.Companion.toMediaType
 
 /**
  * LLM API 重试策略。
