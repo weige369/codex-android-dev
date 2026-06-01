@@ -152,5 +152,3 @@ class ApiConnectionTester(private val context: Context) {
         }
     }
 }
-
-private fun String.toMediaType() = okhttp3.MediaType.Companion.toMediaType(this)
