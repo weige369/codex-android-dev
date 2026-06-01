@@ -26,6 +26,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.codex.android.util.DevelopmentEnvironment
 import com.codex.android.util.LinuxEnvironment
+import com.codex.android.ui.theme.*
 import kotlinx.coroutines.launch
 
 /**
@@ -59,16 +60,17 @@ fun DevEnvironmentScreen(
     }
 
     Scaffold(
+        containerColor = CodexBackground,
         topBar = {
             TopAppBar(
-                title = { Text("开发环境", fontSize = 18.sp) },
+                title = { Text("开发环境", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = CodexOnSurface) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "返回")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "返回", tint = CodexOnSurface)
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface
+                    containerColor = CodexBackground
                 )
             )
         }
@@ -130,14 +132,14 @@ fun DevEnvironmentScreen(
             // ===== 工具列表 =====
             if (envInfo?.state == DevelopmentEnvironment.EnvState.SELF_CONTAINED_LINUX) {
                 item {
-                    SectionTitle("已安装环境")
+                    CodexSectionHeader("已安装环境", Icons.Default.CheckCircle)
                 }
                 item {
                     ToolStatusList(envInfo!!)
                 }
             }
             item {
-                SectionTitle("开发工具")
+                CodexSectionHeader("开发工具", Icons.Default.Build)
             }
             item {
                 ActionCard(
@@ -212,15 +214,15 @@ fun DevEnvironmentScreen(
             // ===== 安装日志 =====
             if (installLog.isNotBlank()) {
                 item {
-                    SectionTitle("安装日志")
+                    CodexSectionHeader("安装日志", Icons.Default.Terminal)
                 }
                 item {
                     Surface(
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(200.dp),
-                        shape = RoundedCornerShape(8.dp),
-                        color = Color(0xFF0A0A0F)
+                        shape = RoundedCornerShape(12.dp),
+                        color = CodexTerminalBg
                     ) {
                         LazyColumn(
                             modifier = Modifier.padding(8.dp)
@@ -242,7 +244,7 @@ fun DevEnvironmentScreen(
             // ===== 已安装工具列表 =====
             if (envInfo != null && envInfo!!.state != DevelopmentEnvironment.EnvState.ERROR) {
                 item {
-                    SectionTitle("已安装环境")
+                    CodexSectionHeader("已安装环境", Icons.Default.CheckCircle)
                 }
 
                 item {
@@ -253,13 +255,14 @@ fun DevEnvironmentScreen(
             // ===== 已安装工具详情 =====
             if (envInfo != null && envInfo!!.state != DevelopmentEnvironment.EnvState.ERROR) {
                 item {
-                    SectionTitle("工具版本")
+                    CodexSectionHeader("工具版本", Icons.Default.Info)
                 }
                 item {
                     Card(
                         modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp),
                         colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                            containerColor = CodexSurfaceVariant
                         )
                     ) {
                         Column(modifier = Modifier.padding(16.dp)) {
@@ -277,14 +280,14 @@ fun DevEnvironmentScreen(
             item {
                 Spacer(Modifier.height(16.dp))
                 Surface(
-                    shape = RoundedCornerShape(8.dp),
-                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+                    shape = RoundedCornerShape(12.dp),
+                    color = CodexSurfaceVariant
                 ) {
                     Text(
                         "开发环境基于内置 proot + Ubuntu 24.04 LTS\n无需外部 Termux 依赖",
                         modifier = Modifier.padding(16.dp),
                         fontSize = 12.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        color = CodexOnSurfaceVariant,
                         lineHeight = 18.sp
                     )
                 }
@@ -302,16 +305,17 @@ private fun EnvironmentStatusCard(
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(12.dp),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
+            containerColor = CodexSurfaceVariant
         )
     ) {
         Column(modifier = Modifier.padding(20.dp)) {
             if (isLoading) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                    CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp, color = CodexBrandOrange)
                     Spacer(Modifier.width(12.dp))
-                    Text("正在检测环境...", fontSize = 14.sp)
+                    Text("正在检测环境...", fontSize = 14.sp, color = CodexOnSurface)
                 }
             } else if (envInfo == null) {
                 Text("环境检测失败", color = MaterialTheme.colorScheme.error)
@@ -320,11 +324,11 @@ private fun EnvironmentStatusCard(
                 Row(verticalAlignment = Alignment.Top) {
                     val (icon, color, text) = when (envInfo.state) {
                         DevelopmentEnvironment.EnvState.SELF_CONTAINED_LINUX ->
-                            Triple(Icons.Default.CheckCircle, Color(0xFF2ED573), "自包含 Linux 已就绪（可运行 Codex）")
+                            Triple(Icons.Default.CheckCircle, StatusOnline, "自包含 Linux 已就绪（可运行 Codex）")
                         DevelopmentEnvironment.EnvState.SELF_CONTAINED ->
-                            Triple(Icons.Default.Warning, Color(0xFFFFA502), "受限模式（无法运行 Codex）")
+                            Triple(Icons.Default.Warning, CodexWarning, "受限模式（无法运行 Codex）")
                         DevelopmentEnvironment.EnvState.ERROR ->
-                            Triple(Icons.Default.Error, Color(0xFFFF4757), "环境异常")
+                            Triple(Icons.Default.Error, CodexError, "环境异常")
                     }
                     val description = when (envInfo.state) {
                         DevelopmentEnvironment.EnvState.SELF_CONTAINED ->
@@ -336,13 +340,13 @@ private fun EnvironmentStatusCard(
                     Icon(icon, null, tint = color, modifier = Modifier.size(24.dp))
                     Spacer(Modifier.width(12.dp))
                     Column {
-                        Text(text, fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
+                        Text(text, fontWeight = FontWeight.SemiBold, fontSize = 15.sp, color = CodexOnSurface)
                         if (description.isNotBlank()) {
                             Spacer(Modifier.height(4.dp))
                             Text(
                                 description,
                                 fontSize = 12.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                color = CodexOnSurfaceVariant,
                                 lineHeight = 18.sp
                             )
                         }
@@ -362,8 +366,8 @@ private fun EnvironmentStatusCard(
 @Composable
 private fun CopyableCommand(command: String, onCopy: (String) -> Unit) {
     Surface(
-        shape = RoundedCornerShape(8.dp),
-        color = Color(0xFF0A0A0F),
+        shape = RoundedCornerShape(12.dp),
+        color = CodexTerminalBg,
         modifier = Modifier
             .fillMaxWidth()
             .clickable { onCopy(command) }
@@ -383,7 +387,7 @@ private fun CopyableCommand(command: String, onCopy: (String) -> Unit) {
             Icon(
                 Icons.Default.ContentCopy,
                 contentDescription = "复制",
-                tint = Color(0xFF8888AA),
+                tint = CodexOnSurfaceVariant,
                 modifier = Modifier
                     .size(28.dp)
                     .clip(RoundedCornerShape(6.dp))
@@ -401,25 +405,26 @@ private fun ActionCard(
     title: String,
     subtitle: String,
     buttonText: String,
-    buttonColor: Color = MaterialTheme.colorScheme.primary,
+    buttonColor: Color = CodexBrandOrange,
     enabled: Boolean = true,
     onAction: () -> Unit
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(12.dp),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+            containerColor = CodexSurfaceVariant
         )
     ) {
         Row(
             modifier = Modifier.padding(16.dp).fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Icon(icon, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(28.dp))
+            Icon(icon, null, tint = CodexBrandOrange, modifier = Modifier.size(28.dp))
             Spacer(Modifier.width(12.dp))
             Column(modifier = Modifier.weight(1f)) {
-                Text(title, fontWeight = FontWeight.Medium, fontSize = 14.sp)
-                Text(subtitle, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(title, fontWeight = FontWeight.Medium, fontSize = 14.sp, color = CodexOnSurface)
+                Text(subtitle, fontSize = 12.sp, color = CodexOnSurfaceVariant)
             }
             Spacer(Modifier.width(8.dp))
             Button(
@@ -440,8 +445,9 @@ private fun ActionCard(
 private fun ToolStatusList(info: DevelopmentEnvironment.EnvInfo) {
     Card(
         modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(12.dp),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+            containerColor = CodexSurfaceVariant
         )
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
@@ -466,11 +472,11 @@ private fun ToolStatusRow(name: String, installed: Boolean) {
         Icon(
             if (installed) Icons.Default.CheckCircle else Icons.Default.Cancel,
             null,
-            tint = if (installed) Color(0xFF2ED573) else Color(0xFF8888AA),
+            tint = if (installed) CodexBrandOrange else CodexOnSurfaceVariant,
             modifier = Modifier.size(18.dp)
         )
         Spacer(Modifier.width(10.dp))
-        Text(name, fontSize = 14.sp)
+        Text(name, fontSize = 14.sp, color = CodexOnSurface)
     }
 }
 
@@ -482,25 +488,36 @@ private fun ToolVersionRow(name: String, version: String, installed: Boolean) {
             .padding(vertical = 3.dp),
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
-        Text(name, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(name, fontSize = 13.sp, color = CodexOnSurfaceVariant)
         Text(
             if (installed) version else "未安装",
             fontSize = 13.sp,
             fontWeight = FontWeight.Medium,
-            color = if (installed) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+            color = if (installed) CodexBrandOrange else CodexOnSurfaceVariant.copy(alpha = 0.5f)
         )
     }
 }
 
 @Composable
-private fun SectionTitle(title: String) {
-    Text(
-        title,
-        fontSize = 13.sp,
-        fontWeight = FontWeight.SemiBold,
-        color = MaterialTheme.colorScheme.primary,
+private fun CodexSectionHeader(title: String, icon: ImageVector) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier.padding(start = 4.dp, top = 4.dp)
-    )
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = CodexBrandOrange,
+            modifier = Modifier.size(16.dp)
+        )
+        Spacer(Modifier.width(6.dp))
+        Text(
+            title,
+            fontSize = 13.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = CodexBrandOrange
+        )
+    }
 }
 
 // ===== 自包含 Linux 安装卡片 =====
@@ -514,8 +531,9 @@ fun InstallLinuxCard(
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(12.dp),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+            containerColor = CodexSurfaceVariant
         )
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
@@ -523,16 +541,16 @@ fun InstallLinuxCard(
                 Icon(
                     Icons.Default.Terminal,
                     null,
-                    tint = MaterialTheme.colorScheme.primary,
+                    tint = CodexBrandOrange,
                     modifier = Modifier.size(28.dp)
                 )
                 Spacer(Modifier.width(12.dp))
                 Column(modifier = Modifier.weight(1f)) {
-                    Text("自包含 Linux 环境", fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
+                    Text("自包含 Linux 环境", fontWeight = FontWeight.SemiBold, fontSize = 15.sp, color = CodexOnSurface)
                     Text(
                         "安装 proot + Ubuntu 24.04 LTS (arm64)",
                         fontSize = 12.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        color = CodexOnSurfaceVariant
                     )
                 }
             }
@@ -542,7 +560,7 @@ fun InstallLinuxCard(
                 Text(
                     currentAction,
                     fontSize = 13.sp,
-                    color = MaterialTheme.colorScheme.primary
+                    color = CodexBrandOrange
                 )
             }
 
@@ -551,7 +569,12 @@ fun InstallLinuxCard(
                 Text(
                     installProgress,
                     fontSize = 12.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = CodexOnSurfaceVariant
+                )
+                Spacer(Modifier.height(4.dp))
+                LinearProgressIndicator(
+                    modifier = Modifier.fillMaxWidth().height(4.dp),
+                    color = CodexBrandOrange
                 )
             }
 
@@ -559,8 +582,8 @@ fun InstallLinuxCard(
                 Spacer(Modifier.height(8.dp))
                 Surface(
                     modifier = Modifier.fillMaxWidth().height(120.dp),
-                    shape = RoundedCornerShape(8.dp),
-                    color = Color(0xFF0A0A0F)
+                    shape = RoundedCornerShape(12.dp),
+                    color = CodexTerminalBg
                 ) {
                     Text(
                         installLog.trimStart(),
@@ -578,13 +601,14 @@ fun InstallLinuxCard(
                 onClick = onInstall,
                 enabled = !isInstalling,
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(8.dp)
+                shape = RoundedCornerShape(8.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = CodexBrandOrange)
             ) {
                 if (isInstalling) {
                     CircularProgressIndicator(
                         modifier = Modifier.size(18.dp),
                         strokeWidth = 2.dp,
-                        color = MaterialTheme.colorScheme.onPrimary
+                        color = Color.White
                     )
                     Spacer(Modifier.width(8.dp))
                     Text("安装中...")
