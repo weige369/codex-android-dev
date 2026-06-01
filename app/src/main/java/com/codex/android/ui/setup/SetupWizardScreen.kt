@@ -128,6 +128,7 @@ fun SetupWizardScreen(
 
             // 步骤内容
             AnimatedContent(
+                modifier = Modifier.weight(1f),
                 targetState = currentStep,
                 transitionSpec = {
                     if (targetState > initialState) {
@@ -142,7 +143,7 @@ fun SetupWizardScreen(
             ) { step ->
                 Column(
                     modifier = Modifier
-                        .fillMaxSize()
+                        .fillMaxWidth()
                         .verticalScroll(rememberScrollState())
                         .padding(horizontal = 20.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
