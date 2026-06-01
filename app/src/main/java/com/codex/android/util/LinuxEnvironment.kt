@@ -258,6 +258,8 @@ class LinuxEnvironment(private val context: Context) {
             if (isRootfsValid()) {
                 onStatus?.invoke("Ubuntu rootfs 安装成功!")
                 setupRootfs(rootfs)
+                // 预装基础系统工具（git/curl/wget/ca-certificates 等）
+                installBaseSystemTools()
                 return@withContext true
             } else {
                 onStatus?.invoke("rootfs 解压后验证失败")
@@ -350,17 +352,61 @@ class LinuxEnvironment(private val context: Context) {
         }
     }
 
+    /**
+     * rootfs 安装后的初始配置。
+     */
     private fun setupRootfs(rootfs: File) {
         try {
+            // DNS 配置
             val resolvConf = File(rootfs, "etc/resolv.conf")
             resolvConf.parentFile?.mkdirs()
             resolvConf.writeText("nameserver 8.8.8.8\nnameserver 1.1.1.1\n")
 
+            // 基础目录
             listOf("dev", "proc", "sys", "tmp", "root", "home").forEach {
                 File(rootfs, it).mkdirs()
             }
+
+            // Agent 二进制安装目录
+            File(rootfs, "usr/local/bin").mkdirs()
         } catch (e: Exception) {
             Log.w(TAG, "设置 rootfs 失败", e)
+        }
+    }
+
+    /**
+     * 预装基础系统工具（在 installRootfs 末尾调用）。
+     * 参考 Operit：开箱即用，无需用户在向导手动选择系统工具。
+     */
+    private suspend fun installBaseSystemTools() {
+        try {
+            Log.i(TAG, "预装基础系统工具...")
+            runCommand("apt-get update -qq 2>&1", 60_000)
+
+            val baseTools = listOf(
+                "ca-certificates",  // HTTPS 证书
+                "curl",             // HTTP 客户端
+                "wget",             // 下载工具
+                "git",              // 版本管理
+                "unzip",            // 解压
+                "vim-tiny",         // 最小编辑器
+                "locales"           // locale 支持
+            )
+
+            val installCmd = "DEBIAN_FRONTEND=noninteractive apt-get install -y -qq " +
+                baseTools.joinToString(" ") + " 2>&1"
+
+            val result = runCommand(installCmd, 300_000)
+            if (result.exitCode == 0) {
+                Log.i(TAG, "基础系统工具安装完成")
+            } else {
+                Log.w(TAG, "部分基础工具安装失败: ${result.stderr.take(200)}")
+            }
+
+            // 配置 locale
+            runCommand("locale-gen en_US.UTF-8 2>&1", 10_000)
+        } catch (e: Exception) {
+            Log.w(TAG, "预装基础工具失败（非致命）", e)
         }
     }
 
