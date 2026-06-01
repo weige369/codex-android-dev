@@ -3,6 +3,7 @@ package com.codex.android.agent
 import android.content.Context
 import android.util.Log
 import kotlinx.coroutines.*
+import kotlinx.coroutines.Dispatchers.Main
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -119,48 +120,52 @@ class NativeAgentService(private val context: Context) {
 
     // ===== 工具注册 =====
 
-    private val toolRegistry = mutableMapOf<String, AgentTool>()
+    /**
+     * 能力设备注册表。
+     *
+     * 借鉴 BentOS 的 /dev/ 设备模型：
+     * - 设备必须被"挂载"(mount)才能使用
+     * - 未挂载的设备结构性不可访问（LLM 根本不知道它的存在）
+     * - 每个设备有明确的权限级别（SAFE/MODERATE/ELEVATED/PRIVILEGED）
+     * - 运行时动态挂载/卸载（如 proot 安装后自动挂载 Linux Shell）
+     */
+    private val capabilityRegistry = CapabilityRegistry(context)
 
-    fun registerTool(tool: AgentTool) {
-        toolRegistry[tool.name] = tool
-    }
+    /**
+     * 获取能力设备注册表（供 UI 层查询设备状态/权限）。
+     */
+    fun getCapabilityRegistry(): CapabilityRegistry = capabilityRegistry
 
-    fun registerDefaultTools() {
-        // 核心工具
-        registerTool(ShellTool(context))
-        registerTool(FileReadTool(context))
-        registerTool(FileWriteTool(context))
-        // 扩展工具
-        registerTool(SearchTool(context))
-        registerTool(ProotEnvTool(context))
+    /**
+     * 挂载所有可用设备（替代原 registerDefaultTools + registerEnvironmentAwareTools）。
+     *
+     * CapabilityRegistry.autoMount() 会：
+     * 1. 自动挂载 SAFE 级别设备
+     * 2. 如果用户已授权 MODERATE，自动挂载 MODERATE 设备
+     * 3. 如果 proot 已就绪，自动挂载 Linux Shell 设备
+     */
+    suspend fun mountCapabilities() {
+        capabilityRegistry.autoMount()
     }
 
     /**
-     * 根据环境状态动态注册工具。
-     * 如果 proot Linux 已就绪，注册额外的 Linux 专用工具。
+     * 授权权限级别并尝试挂载对应设备。
      */
-    fun registerEnvironmentAwareTools() {
-        val devEnv = com.codex.android.util.DevelopmentEnvironment(context)
-        val linuxInfo = devEnv.getSelfContainedLinuxInfo()
-        if (linuxInfo.state == com.codex.android.util.LinuxEnvironment.EngineState.READY) {
-            registerTool(LinuxShellTool(context))
-        }
+    suspend fun grantPermissionAndMount(level: PermissionLevel) {
+        capabilityRegistry.grantLevel(level)
+        capabilityRegistry.autoMount()
+    }
+
+    /**
+     * 一键授权 MODERATE 权限（Shell、文件写入等）。
+     */
+    suspend fun grantModerateAccess() {
+        capabilityRegistry.grantModerateAccess()
+        capabilityRegistry.autoMount()
     }
 
     fun getToolDefinitions(): JSONArray {
-        val tools = JSONArray()
-        toolRegistry.forEach { (_, tool) ->
-            val toolObj = JSONObject().apply {
-                put("type", "function")
-                put("function", JSONObject().apply {
-                    put("name", tool.name)
-                    put("description", tool.description)
-                    put("parameters", tool.parameterSchema)
-                })
-            }
-            tools.put(toolObj)
-        }
-        return tools
+        return capabilityRegistry.getToolDefinitions()
     }
 
     // ===== 核心：发送消息 =====
@@ -207,7 +212,7 @@ class NativeAgentService(private val context: Context) {
             put("stream", true)
             put("messages", messagesArray)
             // 工具定义
-            if (toolRegistry.isNotEmpty()) {
+            if (capabilityRegistry.getMountedToolNames().isNotEmpty()) {
                 put("tools", getToolDefinitions())
                 put("tool_choice", "auto")
             }
@@ -354,14 +359,9 @@ class NativeAgentService(private val context: Context) {
             onChunk("\n🔧 执行工具: $toolName\n")
 
             val result = try {
-                val tool = toolRegistry[toolName]
-                if (tool != null) {
-                    val result = tool.execute(toolArgs)
-                    Log.i(TAG, "工具 $toolName 返回: ${result.take(200)}")
-                    result
-                } else {
-                    "错误: 未知工具 '$toolName'"
-                }
+                // 通过 CapabilityRegistry 执行，结构性保证安全：
+                // 未挂载设备的工具根本不会被发送给 LLM，也不会被执行
+                capabilityRegistry.executeTool(toolName, toolArgs)
             } catch (e: Exception) {
                 Log.e(TAG, "工具 $toolName 执行失败", e)
                 "工具执行失败: ${e.message}"
@@ -406,7 +406,7 @@ class NativeAgentService(private val context: Context) {
             put("model", model)
             put("stream", true)
             put("messages", messagesArray)
-            if (toolRegistry.isNotEmpty()) {
+            if (capabilityRegistry.getMountedToolNames().isNotEmpty()) {
                 put("tools", getToolDefinitions())
                 put("tool_choice", "auto")
             }
@@ -527,10 +527,18 @@ class NativeAgentService(private val context: Context) {
     /**
      * 将服务标记为就绪（无需外部二进制）
      */
+    /**
+     * 将服务标记为就绪。
+     * 使用 CapabilityRegistry 挂载所有可用设备。
+     */
     fun markReady() {
-        registerDefaultTools()
-        _isReady.value = true
-        _connectionState.value = ConnectionState.CONNECTED
+        scope.launch {
+            mountCapabilities()
+            withContext(Dispatchers.Main) {
+                _isReady.value = true
+                _connectionState.value = ConnectionState.CONNECTED
+            }
+        }
     }
 
     fun destroy() {
@@ -565,8 +573,8 @@ class NativeAgentService(private val context: Context) {
             "- 如需完整开发工具链，请引导用户安装 Ubuntu proot"
         }
 
-        // 构建工具列表
-        val toolListText = toolRegistry.keys.joinToString(separator = "\n- ", prefix = "- ")
+        // 构建设备清单（BentOS 风格）
+        val deviceManifest = capabilityRegistry.getDeviceManifest()
 
         // 构建执行策略
         val strategyText = if (hasProot) {
@@ -585,14 +593,15 @@ class NativeAgentService(private val context: Context) {
             appendLine("- 工作目录: ${context.filesDir.absolutePath}")
             appendLine(envInfoText)
             appendLine()
-            appendLine("可用工具：")
-            appendLine(toolListText)
+            appendLine("可用设备：")
+            appendLine(deviceManifest)
             appendLine()
             appendLine("执行策略：")
             appendLine(strategyText)
-            appendLine("- file_read/file_write 用于精确的文件操作，shell 用于批量操作")
-            appendLine("- search 用于查找文件和代码内容")
-            appendLine("- proot_env 用于查询和管理 Linux 环境")
+            appendLine("- /dev/fs/read + /dev/fs/write 用于精确的文件操作，/dev/shell 用于批量操作")
+            appendLine("- /dev/search 用于查找文件和代码内容")
+            appendLine("- /dev/env/proot 用于查询和管理 Linux 环境")
+            appendLine("- /dev/linux/shell 在 proot 中执行完整的 Linux 命令")
             appendLine("- 危险命令（rm -rf、dd 等）执行前需提醒用户")
             appendLine()
             append("请用中文回复。")
