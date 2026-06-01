@@ -14,6 +14,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import kotlinx.coroutines.launch
 
 /**
  * 工具权限请求弹窗。
@@ -34,9 +35,9 @@ import androidx.compose.ui.window.Dialog
  * pendingRequest?.let { request ->
  *     ToolPermissionDialog(
  *         request = request,
- *         onAllow = { permissionManager.respondToPermissionRequest(PermissionDecision.ALLOW) },
- *         onAlwaysAllow = { permissionManager.respondToPermissionRequest(PermissionDecision.ALLOW, alwaysApply = true) },
- *         onDeny = { permissionManager.respondToPermissionRequest(PermissionDecision.FORBID) }
+ *         onAllow = { /* scope.launch { permissionManager.respondToPermissionRequest(PermissionDecision.ALLOW) } */ },
+ *         onAlwaysAllow = { /* scope.launch { permissionManager.respondToPermissionRequest(PermissionDecision.ALLOW, alwaysApply = true) } */ },
+ *         onDeny = { /* scope.launch { permissionManager.respondToPermissionRequest(PermissionDecision.FORBID) } */ }
  *     )
  * }
  * ```
@@ -220,6 +221,7 @@ fun ToolPermissionSettingsScreen(
     modifier: Modifier = Modifier
 ) {
     var masterSwitch by remember { mutableStateOf(PermissionDecision.ASK) }
+    val scope = rememberCoroutineScope()
 
     // 收集主控开关状态
     LaunchedEffect(Unit) {
@@ -259,9 +261,7 @@ fun ToolPermissionSettingsScreen(
                     selected = masterSwitch == PermissionDecision.ALLOW,
                     onClick = {
                         masterSwitch = PermissionDecision.ALLOW
-                        kotlinx.coroutines.runBlocking {
-                            permissionManager.setMasterSwitch(PermissionDecision.ALLOW)
-                        }
+                        scope.launch { permissionManager.setMasterSwitch(PermissionDecision.ALLOW) }
                     }
                 )
                 PermissionDecisionRow(
@@ -269,9 +269,7 @@ fun ToolPermissionSettingsScreen(
                     selected = masterSwitch == PermissionDecision.ASK,
                     onClick = {
                         masterSwitch = PermissionDecision.ASK
-                        kotlinx.coroutines.runBlocking {
-                            permissionManager.setMasterSwitch(PermissionDecision.ASK)
-                        }
+                        scope.launch { permissionManager.setMasterSwitch(PermissionDecision.ASK) }
                     }
                 )
                 PermissionDecisionRow(
@@ -279,9 +277,7 @@ fun ToolPermissionSettingsScreen(
                     selected = masterSwitch == PermissionDecision.FORBID,
                     onClick = {
                         masterSwitch = PermissionDecision.FORBID
-                        kotlinx.coroutines.runBlocking {
-                            permissionManager.setMasterSwitch(PermissionDecision.FORBID)
-                        }
+                        scope.launch { permissionManager.setMasterSwitch(PermissionDecision.FORBID) }
                     }
                 )
             }
@@ -327,5 +323,3 @@ private fun PermissionDecisionRow(
         )
     }
 }
-
-private val kotlinx.coroutines.runBlocking = kotlinx.coroutines.runBlocking
