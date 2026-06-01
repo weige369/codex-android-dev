@@ -225,7 +225,6 @@ class NativeAgentService(private val context: Context) : ChatAgent {
             // 工具定义
             if (capabilityRegistry.getMountedToolNames().isNotEmpty()) {
                 put("tools", getToolDefinitions())
-                put("tool_choice", "auto")
             }
         }
 
@@ -316,8 +315,11 @@ class NativeAgentService(private val context: Context) : ChatAgent {
 
             override fun onFailure(eventSource: EventSource, t: Throwable?, response: Response?) {
                 val errorMsg = when {
+                    response != null -> {
+                        val body = try { response.body?.string()?.take(500) } catch (_: Exception) { null }
+                        "HTTP ${response.code}: ${body ?: response.message}"
+                    }
                     t != null -> "连接失败: ${t.message}"
-                    response != null -> "HTTP ${response.code}: ${response.message}"
                     else -> "未知错误"
                 }
                 Log.e(TAG, errorMsg, t)
@@ -434,7 +436,6 @@ class NativeAgentService(private val context: Context) : ChatAgent {
             put("messages", messagesArray)
             if (capabilityRegistry.getMountedToolNames().isNotEmpty()) {
                 put("tools", getToolDefinitions())
-                put("tool_choice", "auto")
             }
         }
 
@@ -511,8 +512,11 @@ class NativeAgentService(private val context: Context) : ChatAgent {
 
             override fun onFailure(eventSource: EventSource, t: Throwable?, response: Response?) {
                 val errorMsg = when {
+                    response != null -> {
+                        val body = try { response.body?.string()?.take(500) } catch (_: Exception) { null }
+                        "HTTP ${response.code}: ${body ?: response.message}"
+                    }
                     t != null -> "继续对话失败: ${t.message}"
-                    response != null -> "HTTP ${response.code}"
                     else -> "未知错误"
                 }
                 Log.e(TAG, errorMsg, t)
