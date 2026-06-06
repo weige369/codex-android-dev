@@ -125,7 +125,7 @@ class AgentOrchestrator(private val context: Context) {
     /**
      * 启动 Codex CLI Agent。
      *
-     * codex --model <model> --approval-mode <mode>
+     * codex --full-auto --model <model> "prompt" < /dev/null
      * 运行在 proot 中，stdin/stdout 交互。
      */
     private suspend fun startCodexAgent(workingDir: String?): Boolean {
@@ -138,13 +138,14 @@ class AgentOrchestrator(private val context: Context) {
             val command = buildString {
                 append("codex")
                 append(" --model ").append(model)
-                append(" --approval-mode full-auto")  // 自动模式（权限由 CapabilityRegistry 控制）
-                append(" --quiet")  // 非 TUI 模式
+                append(" --full-auto")  // 全自动模式（跳过审批）
+                append(" < /dev/null")  // 防止 stdin 阻塞
             }
 
             val process = launchInProot(command, workDir, mapOf(
                 "OPENAI_API_KEY" to apiKey,
                 "OPENAI_BASE_URL" to getApiUrl()
+                "CODEX_DISABLE_BROWSER" to "1"
             ))
 
             _agents[AgentType.CODEX] = AgentProcess(
@@ -181,11 +182,12 @@ class AgentOrchestrator(private val context: Context) {
             val model = getModel()
 
             // OpenCode 使用 opencode run 子命令
-            val command = "opencode --model $model"
+            val command = "opencode run --format json -m $model"
 
             val process = launchInProot(command, workDir, mapOf(
                 "OPENAI_API_KEY" to apiKey,
                 "OPENAI_BASE_URL" to getApiUrl()
+                "CODEX_DISABLE_BROWSER" to "1"
             ))
 
             _agents[AgentType.OPENCODE] = AgentProcess(
