@@ -72,7 +72,7 @@ class AgentBinaryManager(private val context: Context) {
                 description = "OpenAI Codex CLI - 通过 Node.js 安装（规避 Android 16 W^X 限制）",
                 installMethod = InstallMethod.NPM_INSTALL,
                 estimatedSize = "~80MB",
-                version = "0.133.0"
+                version = "0.137.0"
             ),
             AgentBinaryDef(
                 agentType = AgentOrchestrator.AgentType.OPENCODE,
@@ -97,7 +97,7 @@ class AgentBinaryManager(private val context: Context) {
         // Codex CLI: 从 weige369/codex fork 的 Release 下载
         // 需要预先交叉编译 aarch64-musl 版本并上传到 Release
         private val CODEX_DOWNLOAD_URLS = listOf(
-            "https://github.com/weige369/codex/releases/download/v0.133.0/codex-aarch64-unknown-linux-musl",
+            "https://github.com/weige369/codex/releases/download/v0.137.0/codex-aarch64-unknown-linux-musl",
             "https://github.com/openai/codex/releases/latest/download/codex-aarch64-unknown-linux-musl"
         )
 
