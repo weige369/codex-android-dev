@@ -144,7 +144,7 @@ class AgentOrchestrator(private val context: Context) {
 
             val process = launchInProot(command, workDir, mapOf(
                 "OPENAI_API_KEY" to apiKey,
-                "OPENAI_BASE_URL" to getApiUrl()
+                "OPENAI_BASE_URL" to getApiUrl(),
                 "CODEX_DISABLE_BROWSER" to "1"
             ))
 
@@ -186,7 +186,7 @@ class AgentOrchestrator(private val context: Context) {
 
             val process = launchInProot(command, workDir, mapOf(
                 "OPENAI_API_KEY" to apiKey,
-                "OPENAI_BASE_URL" to getApiUrl()
+                "OPENAI_BASE_URL" to getApiUrl(),
                 "CODEX_DISABLE_BROWSER" to "1"
             ))
 
