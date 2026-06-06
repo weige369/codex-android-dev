@@ -113,11 +113,16 @@ fun WorkspaceScreen(
             val nativeAgent = remember(ctx) { NativeAgentService.getInstance(ctx) }
             val prootAgent = remember(ctx) { ProotAgentService.getInstance(ctx) }
             val prootReady = remember { mutableStateOf(false) }
+            val installedAgents = remember { mutableStateOf<Set<AgentOrchestrator.AgentType>>(emptySet()) }
             
-            // Check proot readiness periodically
+            // Check proot readiness and agent install status periodically
             LaunchedEffect(Unit) {
                 while (true) {
                     prootReady.value = prootAgent.isProotReady()
+                    if (prootReady.value) {
+                        val statuses = prootAgent.getAllAgentStatuses()
+                        installedAgents.value = statuses.filter { it.value.isInstalled }.keys
+                    }
                     delay(3000)
                 }
             }
@@ -136,6 +141,7 @@ fun WorkspaceScreen(
                     AgentTypeSelector(
                         selectedType = selectedAgentType.value,
                         prootReady = prootReady.value,
+                        installedAgents = installedAgents.value,
                         onTypeSelected = { selectedAgentType.value = it }
                     )
                     NativeChatView(
@@ -787,6 +793,7 @@ fun forwardStatusToWebView(
 private fun AgentTypeSelector(
     selectedType: AgentOrchestrator.AgentType,
     prootReady: Boolean,
+    installedAgents: Set<AgentOrchestrator.AgentType>,
     onTypeSelected: (AgentOrchestrator.AgentType) -> Unit
 ) {
     val agentTypes = listOf(
@@ -806,23 +813,34 @@ private fun AgentTypeSelector(
     ) {
         agentTypes.forEach { (type, label) ->
             val isProotAgent = type != AgentOrchestrator.AgentType.NATIVE
-            val enabled = !isProotAgent || prootReady
+            val isInstalled = !isProotAgent || type in installedAgents
+            val enabled = (!isProotAgent || prootReady) && (type == AgentOrchestrator.AgentType.NATIVE || isInstalled)
             val selected = selectedType == type
             
             FilterChip(
                 selected = selected,
                 onClick = { if (enabled) onTypeSelected(type) },
                 label = {
-                    Text(
-                        text = label,
-                        fontSize = 11.sp,
-                        fontFamily = FontFamily.Monospace,
-                        color = when {
-                            !enabled -> CodexOnSurfaceVariant.copy(alpha = 0.3f)
-                            selected -> CodexBrandOrange
-                            else -> CodexOnSurfaceVariant
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = label,
+                            fontSize = 11.sp,
+                            fontFamily = FontFamily.Monospace,
+                            color = when {
+                                !enabled -> CodexOnSurfaceVariant.copy(alpha = 0.3f)
+                                selected -> CodexBrandOrange
+                                else -> CodexOnSurfaceVariant
+                            }
+                        )
+                        // 安装状态标识
+                        if (isProotAgent && prootReady) {
+                            Text(
+                                text = if (isInstalled) " ✓" else " ·",
+                                fontSize = 9.sp,
+                                color = if (isInstalled) CodexBrandOrange.copy(alpha = 0.7f) else CodexOnSurfaceVariant.copy(alpha = 0.3f)
+                            )
                         }
-                    )
+                    }
                 },
                 enabled = enabled,
                 shape = RoundedCornerShape(12.dp),
@@ -850,6 +868,19 @@ private fun AgentTypeSelector(
                 color = CodexOnSurfaceVariant.copy(alpha = 0.4f),
                 fontFamily = FontFamily.Monospace
             )
+        } else {
+            val uninstalledCount = agentTypes.count { (type, _) -> 
+                type != AgentOrchestrator.AgentType.NATIVE && type !in installedAgents 
+            }
+            if (uninstalledCount > 0) {
+                Spacer(modifier = Modifier.weight(1f))
+                Text(
+                    text = "$uninstalledCount 个Agent待安装",
+                    fontSize = 10.sp,
+                    color = CodexOnSurfaceVariant.copy(alpha = 0.4f),
+                    fontFamily = FontFamily.Monospace
+                )
+            }
         }
     }
 }
