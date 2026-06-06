@@ -184,11 +184,12 @@ class ProotAgentService(private val context: Context) : ChatAgent {
             val stdoutJob = launch {
                 processManager.stdout.collect { line ->
                     if (isActive && !processExited) {
-                        // 过滤 ANSI 转义码（TUI 工具可能输出）
+                        // 过滤 ANSI 转义码 + 解析 Agent 输出格式
                         val cleaned = stripAnsiEscape(line)
-                        if (cleaned.isNotBlank()) {
-                            responseBuffer.appendLine(cleaned)
-                            onChunk(cleaned + "\n")
+                        val parsed = parseAgentOutput(cleaned, currentAgentType)
+                        if (parsed != null) {
+                            responseBuffer.appendLine(parsed)
+                            onChunk(parsed + "\n")
                         }
                     }
                 }
@@ -375,6 +376,54 @@ class ProotAgentService(private val context: Context) : ChatAgent {
      */
     private fun stripAnsiEscape(input: String): String {
         return input.replace(Regex("\u001B\\[[;\\d]*[ -/]*[@-~]"), "")
+    }
+
+    /**
+     * 解析 Agent stdout 行。
+     *
+     * - OpenCode --format json 输出 NDJSON 事件流，需要提取 text 内容
+     * - Codex CLI 输出纯文本，直接透传
+     * - OpenManus 输出待确认
+     */
+    private fun parseAgentOutput(line: String, agentType: AgentOrchestrator.AgentType): String? {
+        return when (agentType) {
+            AgentOrchestrator.AgentType.OPENCODE -> {
+                // OpenCode NDJSON: {"type":"assistant_content","delta":{"text":"..."},...}
+                if (line.trimStart().startsWith("{")) {
+                    try {
+                        val json = org.json.JSONObject(line)
+                        when (json.optString("type")) {
+                            "assistant_content" -> {
+                                val delta = json.optJSONObject("delta")
+                                delta?.optString("text", null)
+                            }
+                            "tool_call" -> {
+                                val name = json.optJSONObject("function")?.optString("name", "") ?: ""
+                                "🔧 $name"
+                            }
+                            "tool_result" -> {
+                                val content = json.optString("content", "")
+                                if (content.isNotBlank()) content.take(200) else null
+                            }
+                            "error" -> {
+                                val msg = json.optString("message", json.optString("error", ""))
+                                if (msg.isNotBlank()) "❌ $msg" else null
+                            }
+                            else -> null  // 忽略其他事件类型
+                        }
+                    } catch (_: Exception) {
+                        // 非 JSON 行，直接透传
+                        line
+                    }
+                } else {
+                    line.ifBlank { null }
+                }
+            }
+            else -> {
+                // Codex CLI / OpenManus: 纯文本输出
+                line.ifBlank { null }
+            }
+        }
     }
 
     override fun cancelStream() {
