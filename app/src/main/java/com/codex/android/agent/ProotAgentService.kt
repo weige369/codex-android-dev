@@ -7,33 +7,34 @@ import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 
 /**
- * Proot Agent 服务适配器。
+ * Proot Agent 服务适配器 — 一次性执行模式。
  *
- * 将 AgentProcessManager 的交互式 shell I/O 模型
- * 转换为 NativeChatView 期望的 sendPromptStream 回调模型。
+ * 核心设计：每次 sendPromptStream() 调用启动一个新的 Agent 进程，
+ * 进程执行完毕后自动退出，stdout 实时推送给 UI。
+ *
+ * 这是因为 Codex CLI / OpenCode 都是 TUI 优先的 CLI 工具，
+ * 不支持真正的交互式 stdin/stdout 会话。
+ * 正确用法是 one-shot 执行：
+ * - Codex CLI: `codex --full-auto "prompt" < /dev/null`
+ * - OpenCode:  `opencode run --format json "prompt"`
+ * - OpenManus: `python3 -m openmanus "prompt"`
  *
  * 架构：
- * ┌──────────────┐    sendPromptStream()    ┌──────────────────┐
- * │ NativeChatView│  ───onChunk/onComplete──→│ ProotAgentService │
- * │              │                           │ (适配器)          │
- * └──────────────┘                           └───────┬──────────┘
- *                                                     │ stdin/stdout
- *                                             ┌───────┴──────────┐
- *                                             │ AgentProcessManager│
- *                                             │ (proot 进程管理)   │
- *                                             └──────────────────┘
- *
- * 关键设计：
- * - 用户发送 prompt → 写入 agent 进程 stdin
- * - Agent 输出 → 通过 SharedFlow 实时推送给 onChunk
- * - 检测响应结束：空闲超时（agent 输出停止 3 秒）或特定标记
+ * ┌──────────────┐  sendPromptStream()  ┌──────────────────┐
+ * │ NativeChatView│ ──onChunk/onComplete→│ ProotAgentService │
+ * │              │                       │ (one-shot 适配器) │
+ * └──────────────┘                       └───────┬──────────┘
+ *                                                │ 每次启动新进程
+ *                                        ┌───────┴──────────┐
+ *                                        │ AgentProcessManager│
+ *                                        │ (proot 进程管理)   │
+ *                                        └──────────────────┘
  */
 class ProotAgentService(private val context: Context) : ChatAgent {
 
     companion object {
         private const val TAG = "ProotAgentService"
-        private const val RESPONSE_IDLE_TIMEOUT_MS = 3000L  // 3秒无输出视为响应结束
-        private const val RESPONSE_IDLE_CHECK_INTERVAL_MS = 500L
+        private const val STREAM_TIMEOUT_MS = 300_000L  // 5 分钟总超时
 
         @Volatile
         private var INSTANCE: ProotAgentService? = null
@@ -49,7 +50,7 @@ class ProotAgentService(private val context: Context) : ChatAgent {
     private val binaryManager = AgentBinaryManager(context)
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
-    // ===== 连接状态（兼容 NativeAgentService 接口）=====
+    // ===== 连接状态 =====
 
     private val _connectionState = MutableStateFlow(AgentConnectionState.DISCONNECTED)
     override val connectionState: StateFlow<AgentConnectionState> = _connectionState.asStateFlow()
@@ -57,39 +58,21 @@ class ProotAgentService(private val context: Context) : ChatAgent {
     // ===== 当前 Agent 类型 =====
     private var currentAgentType: AgentOrchestrator.AgentType = AgentOrchestrator.AgentType.CODEX
 
-    // ===== 响应收集状态 =====
-    private var isCollectingResponse = false
-    private var lastOutputTime = 0L
-    private var responseBuffer = StringBuilder()
-    private var currentOnChunk: ((String) -> Unit)? = null
-    private var currentOnComplete: ((String) -> Unit)? = null
-    private var currentOnError: ((String) -> Unit)? = null
-    private var idleCheckJob: Job? = null
+    // ===== 当前执行 Job =====
+    private var currentExecutionJob: Job? = null
 
     // ===== 公开 API =====
 
-    /**
-     * 选择 Agent 类型。
-     */
     fun selectAgent(type: AgentOrchestrator.AgentType) {
         currentAgentType = type
     }
 
-    /**
-     * 获取选中的 Agent 类型。
-     */
     fun getSelectedAgent(): AgentOrchestrator.AgentType = currentAgentType
 
-    /**
-     * 检查 Agent 是否已安装。
-     */
     fun isAgentInstalled(type: AgentOrchestrator.AgentType): Boolean {
         return binaryManager.isInstalled(type)
     }
 
-    /**
-     * 安装 Agent。
-     */
     suspend fun installAgent(
         type: AgentOrchestrator.AgentType,
         onProgress: (AgentBinaryManager.InstallProgress) -> Unit
@@ -97,23 +80,16 @@ class ProotAgentService(private val context: Context) : ChatAgent {
         return binaryManager.install(type, onProgress)
     }
 
-    /**
-     * 获取所有 Agent 安装状态。
-     */
     fun getAllAgentStatuses() = binaryManager.getAllStatuses()
 
-    /**
-     * 检查 proot 环境是否就绪。
-     */
     fun isProotReady(): Boolean {
         val linuxEnv = LinuxEnvironment(context)
         return linuxEnv.isInstalled() && linuxEnv.getInfo().state == LinuxEnvironment.EngineState.READY
     }
 
     /**
-     * 启动 Agent 进程。
-     *
-     * 必须在 sendPromptStream 之前调用。
+     * 检查 proot 环境和 Agent 安装状态，返回是否"就绪"。
+     * one-shot 模式下不需要 connect()，但需要确认前置条件。
      */
     suspend fun connect(): Boolean {
         if (_connectionState.value == AgentConnectionState.CONNECTED ||
@@ -124,49 +100,29 @@ class ProotAgentService(private val context: Context) : ChatAgent {
 
         _connectionState.value = AgentConnectionState.CONNECTING
 
-        // 检查 proot 环境
         if (!isProotReady()) {
             _connectionState.value = AgentConnectionState.ERROR
             Log.e(TAG, "proot 环境未就绪")
             return false
         }
 
-        // 检查 Agent 是否已安装
         if (!binaryManager.isInstalled(currentAgentType)) {
             _connectionState.value = AgentConnectionState.ERROR
             Log.e(TAG, "${currentAgentType.displayName} 未安装")
             return false
         }
 
-        // 构建启动命令
-        val command = buildCommand(currentAgentType)
-        val env = buildEnv(currentAgentType)
-
-        // 启动进程
-        val success = processManager.launch(
-            agentType = currentAgentType,
-            command = command,
-            workingDir = "/root",
-            env = env
-        )
-
-        if (success) {
-            _connectionState.value = AgentConnectionState.CONNECTED
-            startOutputCollection()
-            Log.i(TAG, "${currentAgentType.displayName} 已连接")
-        } else {
-            _connectionState.value = AgentConnectionState.ERROR
-            Log.e(TAG, "${currentAgentType.displayName} 启动失败")
-        }
-
-        return success
+        // one-shot 模式：不需要启动长驻进程，直接标记为已连接
+        _connectionState.value = AgentConnectionState.CONNECTED
+        Log.i(TAG, "${currentAgentType.displayName} 就绪 (one-shot 模式)")
+        return true
     }
 
     /**
-     * 发送 prompt 并处理流式响应。
+     * 发送 prompt 并处理流式响应 — one-shot 执行模式。
      *
-     * 兼容 NativeAgentService.sendPromptStream 的接口。
-     * 流程：写入 agent stdin → 收集 stdout → 空闲超时视为完成
+     * 每次 prompt 启动一个新的 Agent 进程，进程执行完毕自动退出。
+     * stdout 实时推送给 onChunk，进程退出时调用 onComplete。
      */
     override fun sendPromptStream(
         prompt: String,
@@ -174,73 +130,184 @@ class ProotAgentService(private val context: Context) : ChatAgent {
         onComplete: (String) -> Unit,
         onError: (String) -> Unit
     ) {
-        scope.launch {
-            // 确保已连接
-            if (_connectionState.value != AgentConnectionState.CONNECTED &&
-                _connectionState.value != AgentConnectionState.STREAMING
-            ) {
-                val connected = connect()
-                if (!connected) {
-                    onError("无法连接到 ${currentAgentType.displayName}，请检查 proot 环境和 Agent 安装状态")
-                    return@launch
-                }
-            }
+        // 取消上一次执行
+        currentExecutionJob?.cancel()
 
-            _connectionState.value = AgentConnectionState.STREAMING
-            responseBuffer.clear()
-            isCollectingResponse = true
-            lastOutputTime = System.currentTimeMillis()
-
-            // 保存回调
-            currentOnChunk = onChunk
-            currentOnComplete = onComplete
-            currentOnError = onError
-
-            // 发送 prompt 到 stdin
-            val sent = processManager.sendInput(prompt)
-            if (!sent) {
-                _connectionState.value = AgentConnectionState.ERROR
-                onError("发送消息失败，Agent 进程可能已退出")
-                cleanupResponse()
+        currentExecutionJob = scope.launch {
+            // 前置检查
+            if (!isProotReady()) {
+                onError("proot 环境未就绪，请先安装 Linux 环境")
                 return@launch
             }
 
-            // 启动空闲检测
-            startIdleDetection()
+            if (!binaryManager.isInstalled(currentAgentType)) {
+                onError("${currentAgentType.displayName} 未安装，请在设置中安装")
+                return@launch
+            }
 
-            Log.d(TAG, "已发送 prompt: ${prompt.take(50)}...")
+            val apiKey = getApiKey()
+            if (apiKey.isBlank()) {
+                onError("API Key 未配置，请先在设置中填写 API Key")
+                return@launch
+            }
+
+            _connectionState.value = AgentConnectionState.STREAMING
+
+            // 构建 one-shot 命令
+            val command = buildOneShotCommand(currentAgentType, prompt)
+            val env = buildEnv(currentAgentType)
+
+            Log.i(TAG, "启动 ${currentAgentType.displayName}: ${command.take(120)}")
+
+            // 停止之前可能残留的进程
+            processManager.stop()
+
+            // 启动新进程
+            val launched = processManager.launch(
+                agentType = currentAgentType,
+                command = command,
+                workingDir = "/root",
+                env = env
+            )
+
+            if (!launched) {
+                _connectionState.value = AgentConnectionState.ERROR
+                onError("启动 ${currentAgentType.displayName} 失败，请检查 proot 环境")
+                return@launch
+            }
+
+            // 收集输出
+            val responseBuffer = StringBuilder()
+            var processExited = false
+
+            // 监听 stdout
+            val stdoutJob = launch {
+                processManager.stdout.collect { line ->
+                    if (isActive && !processExited) {
+                        // 过滤 ANSI 转义码（TUI 工具可能输出）
+                        val cleaned = stripAnsiEscape(line)
+                        if (cleaned.isNotBlank()) {
+                            responseBuffer.appendLine(cleaned)
+                            onChunk(cleaned + "\n")
+                        }
+                    }
+                }
+            }
+
+            // 监听进程退出
+            val exitJob = launch {
+                processManager.processState.collect { state ->
+                    when (state) {
+                        AgentProcessManager.ProcessState.STOPPED,
+                        AgentProcessManager.ProcessState.CRASHED -> {
+                            if (!processExited) {
+                                processExited = true
+                                stdoutJob.cancel()
+
+                                val response = responseBuffer.toString().trim()
+                                val exitInfo = processManager.processInfo.value
+                                val exitCode = exitInfo?.exitCode
+
+                                if (state == AgentProcessManager.ProcessState.CRASHED && response.isEmpty()) {
+                                    _connectionState.value = AgentConnectionState.ERROR
+                                    onError("${currentAgentType.displayName} 异常退出 (code=$exitCode)")
+                                } else {
+                                    _connectionState.value = AgentConnectionState.CONNECTED
+                                    if (response.isNotEmpty()) {
+                                        onComplete(response)
+                                    } else {
+                                        // 进程正常退出但无输出 — 可能是帮助信息或空响应
+                                        onComplete("(Agent 退出，code=$exitCode，无输出)")
+                                    }
+                                }
+                                Log.i(TAG, "${currentAgentType.displayName} 执行完成, code=$exitCode, ${response.length} 字符")
+                            }
+                        }
+                        else -> {}
+                    }
+                }
+            }
+
+            // 超时保护
+            delay(STREAM_TIMEOUT_MS)
+            if (!processExited) {
+                processExited = true
+                stdoutJob.cancel()
+                exitJob.cancel()
+                processManager.stop()
+
+                val response = responseBuffer.toString().trim()
+                if (response.isNotEmpty()) {
+                    _connectionState.value = AgentConnectionState.CONNECTED
+                    onComplete(response)
+                } else {
+                    _connectionState.value = AgentConnectionState.ERROR
+                    onError("${currentAgentType.displayName} 执行超时 (${STREAM_TIMEOUT_MS / 1000}s)")
+                }
+            }
         }
     }
 
-    /**
-     * 停止当前 Agent 进程。
-     */
     fun disconnect() {
-        _connectionState.value = AgentConnectionState.CONNECTED
-        
-        cleanupResponse()
+        currentExecutionJob?.cancel()
+        currentExecutionJob = null
+        processManager.stop()
+        _connectionState.value = AgentConnectionState.DISCONNECTED
         Log.i(TAG, "Agent 已断开")
     }
 
-    // ===== 内部方法 =====
+    // ===== 命令构建 =====
 
     /**
-     * 构建启动命令。
+     * 构建 one-shot 执行命令。
+     *
+     * 关键：每个 CLI 工具的非交互模式不同：
+     * - Codex CLI: `codex --full-auto "prompt" < /dev/null`
+     *   (--full-auto 跳过审批, < /dev/null 防止 stdin 阻塞)
+     * - OpenCode: `opencode run --format json "prompt"`
+     *   (run 子命令是非交互模式, --format json 输出 NDJSON)
+     * - OpenManus: `python3 -m openmanus "prompt"` (取决于其 CLI 设计)
      */
-    private fun buildCommand(type: AgentOrchestrator.AgentType): String {
+    private fun buildOneShotCommand(type: AgentOrchestrator.AgentType, prompt: String): String {
+        // Shell 转义 prompt 中的特殊字符
+        val escapedPrompt = prompt
+            .replace("\\", "\\\\")
+            .replace("'", "'\\''")
+            .replace("\"", "\\\"")
+            .replace("\n", " ")
+            .take(2000)  // 限制长度，防止命令行过长
+
         return when (type) {
             AgentOrchestrator.AgentType.CODEX -> {
                 val model = getModel()
-                "codex --model $model --quiet"
+                // codex --full-auto: 全自动模式，跳过审批
+                // < /dev/null: 防止 codex 阻塞在 stdin 读取
+                buildString {
+                    append("codex --full-auto")
+                    append(" --model '").append(model).append("'")
+                    append(" '").append(escapedPrompt).append("'")
+                    append(" < /dev/null")
+                }
             }
             AgentOrchestrator.AgentType.OPENCODE -> {
-                "opencode"
+                val model = getModel()
+                // opencode run: 非交互模式
+                // --format json: 输出 NDJSON 事件流
+                buildString {
+                    append("opencode run")
+                    append(" --format json")
+                    append(" -m '").append(model).append("'")
+                    append(" '").append(escapedPrompt).append("'")
+                }
             }
             AgentOrchestrator.AgentType.OPENMANUS -> {
-                "cd /root/OpenManus && python3 -m openmanus"
+                buildString {
+                    append("cd /root/OpenManus && ")
+                    append("python3 -m openmanus")
+                    append(" '").append(escapedPrompt).append("'")
+                }
             }
             AgentOrchestrator.AgentType.NATIVE -> {
-                // 不应该到这里
                 "echo 'Native agent does not use proot'"
             }
         }
@@ -258,6 +325,8 @@ class ProotAgentService(private val context: Context) : ChatAgent {
             AgentOrchestrator.AgentType.CODEX -> {
                 env["OPENAI_API_KEY"] = apiKey
                 if (apiUrl.isNotBlank()) env["OPENAI_BASE_URL"] = apiUrl
+                // 禁止 codex 尝试打开浏览器 OAuth
+                env["CODEX_DISABLE_BROWSER"] = "1"
             }
             AgentOrchestrator.AgentType.OPENCODE -> {
                 env["OPENAI_API_KEY"] = apiKey
@@ -273,9 +342,8 @@ class ProotAgentService(private val context: Context) : ChatAgent {
         return env
     }
 
-    /**
-     * 获取 API 配置（复用 NativeAgentService 的 SharedPreferences）。
-     */
+    // ===== 配置辅助 =====
+
     private fun getApiKey(): String {
         val prefs = context.getSharedPreferences("codex_agent_prefs", Context.MODE_PRIVATE)
         return prefs.getString("api_key", "") ?: ""
@@ -299,96 +367,22 @@ class ProotAgentService(private val context: Context) : ChatAgent {
         return provider.defaultModel
     }
 
+    // ===== 工具方法 =====
+
     /**
-     * 收集 Agent stdout 输出并推送给回调。
+     * 去除 ANSI 转义序列。
+     * TUI 工具（如 codex）可能在非 TTY 环境输出残留转义码。
      */
-    private fun startOutputCollection() {
-        scope.launch {
-            processManager.stdout.collect { line ->
-                if (isCollectingResponse) {
-                    lastOutputTime = System.currentTimeMillis()
-                    responseBuffer.appendLine(line)
-                    currentOnChunk?.invoke(line + "\n")
-                    Log.d(TAG, "Agent output: ${line.take(80)}")
-                }
-            }
-        }
-
-        // 监听 stderr 作为辅助信息
-        scope.launch {
-            processManager.stderr.collect { line ->
-                Log.w(TAG, "Agent stderr: ${line.take(80)}")
-                // stderr 不推送给 UI，但标记为有活动
-                lastOutputTime = System.currentTimeMillis()
-            }
-        }
-
-        // 监听进程状态
-        scope.launch {
-            processManager.processState.collect { state ->
-                when (state) {
-                    AgentProcessManager.ProcessState.CRASHED,
-                    AgentProcessManager.ProcessState.STOPPED -> {
-                        if (isCollectingResponse) {
-                            val response = responseBuffer.toString().trim()
-                            if (response.isNotEmpty()) {
-                                currentOnComplete?.invoke(response)
-                            } else {
-                                currentOnError?.invoke("Agent 进程意外退出")
-                            }
-                            cleanupResponse()
-                        }
-                        _connectionState.value = AgentConnectionState.ERROR
-                    }
-                    else -> {}
-                }
-            }
-        }
+    private fun stripAnsiEscape(input: String): String {
+        return input.replace(Regex("\u001B\\[[;\\d]*[ -/]*[@-~]"), "")
     }
 
-    /**
-     * 空闲检测：agent 输出停止后判定响应结束。
-     */
-    private fun startIdleDetection() {
-        idleCheckJob?.cancel()
-        idleCheckJob = scope.launch {
-            while (isCollectingResponse) {
-                delay(RESPONSE_IDLE_CHECK_INTERVAL_MS)
-                val elapsed = System.currentTimeMillis() - lastOutputTime
-                if (elapsed >= RESPONSE_IDLE_TIMEOUT_MS && responseBuffer.isNotEmpty()) {
-                    // 空闲超时，视为响应完成
-                    val response = responseBuffer.toString().trim()
-                    currentOnComplete?.invoke(response)
-                    cleanupResponse()
-                    _connectionState.value = AgentConnectionState.CONNECTED
-                    Log.d(TAG, "响应完成 (空闲超时 ${RESPONSE_IDLE_TIMEOUT_MS}ms), ${response.length} 字符")
-                    break
-                }
-            }
-        }
-    }
-
-    /**
-     * 清理响应收集状态。
-     */
-    private fun cleanupResponse() {
-        isCollectingResponse = false
-        responseBuffer.clear()
-        currentOnChunk = null
-        currentOnComplete = null
-        currentOnError = null
-        idleCheckJob?.cancel()
-        idleCheckJob = null
-    }
-
-    /**
-     * 是否已配置 API。
-     */
     override fun cancelStream() {
+        currentExecutionJob?.cancel()
+        currentExecutionJob = null
+        processManager.stop()
         _connectionState.value = AgentConnectionState.CONNECTED
-        
-        cleanupResponse()
-        Log.i(TAG, "Stream cancelled")
+        Log.i(TAG, "Stream cancelled, process stopped")
     }
 
     override fun isConfigured(): Boolean = getApiKey().isNotBlank() && getApiUrl().isNotBlank()
