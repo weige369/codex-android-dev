@@ -281,30 +281,43 @@ class LinuxEnvironment(private val context: Context) {
                     var entry = tar.nextEntry
                     var processed = 0L
                     while (entry != null) {
-                        val target = File(dest, entry.name)
+                        // 安全获取 entry name 和大小，避免 PAX/稀疏文件头导致空指针
+                        val entryName = entry.name ?: run {
+                            entry = tar.nextEntry
+                            continue
+                        }
+                        val target = File(dest, entryName)
+                        
                         if (entry.isDirectory) {
                             target.mkdirs()
                         } else if (entry.isSymbolicLink) {
                             try {
                                 Os.symlink(entry.linkName ?: "", target.path)
                             } catch (e: Exception) {
-                                Log.w(TAG, "symlink failed, continuing anyway", e)
+                                Log.w(TAG, "symlink failed for $entryName, continuing", e)
                             }
                         } else {
+                            // 跳过 PAX 头、全局扩展头等特殊条目
+                            if (entryName.startsWith("PaxHeaders.") || entryName == "././@LongLink") {
+                                entry = tar.nextEntry
+                                continue
+                            }
                             target.parentFile?.mkdirs()
                             FileOutputStream(target).use { out ->
                                 val buffer = ByteArray(8192)
                                 var read: Int
+                                var entryBytes = 0L
                                 while (tar.read(buffer).also { read = it } != -1) {
                                     out.write(buffer, 0, read)
+                                    entryBytes += read.toLong()
                                 }
+                                processed += entryBytes
                             }
-                            if (entry.mode and 64 != 0) {
+                            if ((entry.mode and 64) != 0) {
                                 target.setExecutable(true, false)
                             }
                         }
                         entry = tar.nextEntry
-                        processed = totalBytes - tar.available().toLong()
                         onProgress?.invoke(processed, totalBytes)
                     }
                 }
