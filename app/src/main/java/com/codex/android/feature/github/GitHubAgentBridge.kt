@@ -304,7 +304,7 @@ $diffSection
 """.trimIndent()
 
         val response = agentProvider.execute(prompt, stream = true)
-        parseGitCommand(response)
+        Result.success(parseGitCommand(response))
     }
 
     data class GitCommand(
