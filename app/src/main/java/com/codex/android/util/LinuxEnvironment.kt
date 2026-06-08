@@ -114,6 +114,10 @@ class LinuxEnvironment(private val context: Context) {
         if (info.prootLoaderPath.isNotEmpty()) env["PROOT_LOADER"] = info.prootLoaderPath
         if (info.prootLoader32Path.isNotEmpty()) env["PROOT_LOADER_32"] = info.prootLoader32Path
 
+        // proot 需要在有写权限的位置创建临时目录 — Android app 无法写入 /tmp
+        val prootTmp = File(context.cacheDir, "proot-tmp").also { it.mkdirs() }
+        env["PROOT_TMP_DIR"] = prootTmp.absolutePath
+
         val libLinkDir = File(context.cacheDir, "proot-libs")
         libLinkDir.mkdirs()
         val tallocLink = File(libLinkDir, "libtalloc.so.2")
