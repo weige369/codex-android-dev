@@ -12,6 +12,7 @@ import androidx.compose.ui.graphics.Color
 // ── Background ──
 val CxBackground = Color(0xFF0F1115)
 val CxSurface = Color(0xFF171A21)
+val CxSurfaceDark = CxSurface  // Alias for backward compat
 val CxSurfaceVariant = Color(0xFF1D212B)
 val CxBorder = Color(0xFF2A2F3A)
 val CxDivider = Color(0xFF2A2F3A)

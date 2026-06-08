@@ -78,7 +78,7 @@ class CodexRuntimeService : Service() {
     private val serviceScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private val logsLock = Any()
     private var totalLogCount = 0
-    private const val MAX_LOG_ENTRIES = 200
+    private val MAX_LOG_ENTRIES = 200
     private lateinit var codexManager: CodexManager
     private lateinit var devEnv: DevelopmentEnvironment
     private var codexProcess: java.lang.Process? = null

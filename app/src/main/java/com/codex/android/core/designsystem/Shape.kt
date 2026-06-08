@@ -14,3 +14,4 @@ val CxShapeSmall = RoundedCornerShape(8.dp)
 val CxShapeMedium = RoundedCornerShape(10.dp)
 val CxShapeDefault = RoundedCornerShape(12.dp)
 val CxShapeLarge = RoundedCornerShape(16.dp)
+val CxRadiusMd = 12.dp  // Alias for CxShapeDefault corner radius

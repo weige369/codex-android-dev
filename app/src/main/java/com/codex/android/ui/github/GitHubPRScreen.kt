@@ -204,9 +204,8 @@ fun GitHubPRScreen(
                     CircularProgressIndicator()
                 }
             } else if (errorMessage != null) {
-                val msg = errorMessage ?: return
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text(msg, color = CxError)
+                    Text(errorMessage ?: "未知错误", color = CxError)
                 }
             } else if (prs.isEmpty()) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
