@@ -143,7 +143,6 @@ class LinuxEnvironment(private val context: Context) {
             "--rootfs=$rootfs",
             "--root-id",
             "--kill-on-exit",
-            "-0",
             "-b", "/dev",
             "-b", "/proc",
             "-b", "/sys",

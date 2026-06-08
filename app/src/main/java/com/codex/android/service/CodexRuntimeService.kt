@@ -407,7 +407,7 @@ class CodexRuntimeService : Service() {
             // 构建启动命令 — 尝试 exec-server（Codex 0.133.0 标准子命令）
             addLog("通过 proot 启动 Codex exec-server...")
             // 依次尝试多种命令格式
-            val launchCmd = "exec /usr/local/bin/codex exec-server --port $_wsPort --http-port ${_wsPort + 1} 2>&1"
+            val launchCmd = "exec /usr/local/bin/codex exec-server --port $_wsPort --http-port ${_wsPort + 1}"
             addLog("启动命令: $launchCmd")
             val cmd = linuxEnv.buildProotCommand(launchCmd)
             addLog("完整 proot 命令: ${cmd.joinToString(" ")}")
@@ -427,12 +427,14 @@ class CodexRuntimeService : Service() {
             isRunning = true
             addLog("proot 进程已启动，PID 暂不可知")
 
-            // 同时监控 stdout 和 stderr
+            // 同时监控 stdout 和 stderr + 进程存活
             serviceScope.launch {
                 try {
+                    val process = codexProcess ?: return@launch
+                    
                     val stdoutJob = launch {
                         try {
-                            codexProcess?.inputStream?.bufferedReader()?.use { reader ->
+                            process.inputStream.bufferedReader().use { reader ->
                                 reader.lines().forEach { line ->
                                     addLog("[Codex-proot] $line")
                                     if (line.contains("listening", ignoreCase = true) ||
@@ -450,7 +452,7 @@ class CodexRuntimeService : Service() {
                     }
                     val stderrJob = launch {
                         try {
-                            codexProcess?.errorStream?.bufferedReader()?.use { reader ->
+                            process.errorStream.bufferedReader().use { reader ->
                                 reader.lines().forEach { line ->
                                     if (line.isNotBlank()) {
                                         addLog("[Codex-proot-err] $line")
@@ -461,8 +463,32 @@ class CodexRuntimeService : Service() {
                             addLog("Codex proot stderr 已关闭: ${e.message}")
                         }
                     }
-                    // 等待两个流都结束（或进程退出）
+                    // 进程存活监控：每 5 秒检查一次
+                    val monitorJob = launch {
+                        var lastCheck = 0
+                        while (isRunning && isActive) {
+                            delay(5000)
+                            lastCheck++
+                            if (!process.isAlive) {
+                                val exitCode = process.exitValue()
+                                addLog("[Codex-proot] 进程已退出, exit=$exitCode")
+                                _state.value = RuntimeState.ERROR
+                                updateNotification("Codex 异常退出 (exit=$exitCode)")
+                                break
+                            }
+                            if (lastCheck >= 12) { // 60秒无"ready"输出
+                                addLog("[Codex-proot] 进程存活但60秒无就绪信号，可能卡住")
+                            }
+                        }
+                    }
+                    // 等待流关闭
                     joinAll(stdoutJob, stderrJob)
+                    monitorJob.cancel()
+                    
+                    // 流关闭后检查最终状态
+                    if (process.isAlive) {
+                        addLog("[Codex-proot] stdout/stderr 已关闭但进程仍存活")
+                    }
                 } catch (e: Exception) {
                     addLog("Codex proot 输出监控异常: ${e.message}")
                 }
