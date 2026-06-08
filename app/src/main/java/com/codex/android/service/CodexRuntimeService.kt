@@ -213,6 +213,8 @@ class CodexRuntimeService : Service() {
                     // 下载完成后也需要通过 proot 启动（不能走 direct 路径）
                     addLog("proot-linux 模式：通过 proot 启动...")
                     startCodexInProot(linuxInfo)
+                    // startCodexInProot 内部已处理状态，不在此处再检查 isAlive
+                    return
                 }
                 else -> startDirect()
             }
@@ -378,24 +380,29 @@ class CodexRuntimeService : Service() {
             val setExecOk = codexInRootfs.setExecutable(true)
             addLog("Codex 二进制已安装到 rootfs: ${codexInRootfs.absolutePath} (${codexInRootfs.length()} bytes, executable=$setExecOk)")
 
-            // 先做 proot 环境诊断
-            addLog("--- proot 环境诊断 ---")
+            // 先做最小 proot 验证 — 只跑 echo 确认 proot 能启动
+            addLog("--- proot 最小验证 (echo hello) ---")
             try {
-                val probeCmd = linuxEnv.buildProotCommand("/bin/bash -c 'uname -a; which bash; which codex 2>&1; file /usr/local/bin/codex 2>&1; ls -la /usr/local/bin/codex 2>&1'")
-                val probeEnv = linuxEnv.getProotEnv()
-                val probeProcess = ProcessBuilder(probeCmd)
+                val testCmd = linuxEnv.buildProotCommand("echo 'proot_ok'")
+                val testEnv = linuxEnv.getProotEnv().toMutableMap().apply { remove("LD_LIBRARY_PATH") }
+                val testProcess = ProcessBuilder(testCmd)
                     .apply {
-                        environment().putAll(probeEnv)
+                        environment().putAll(testEnv)
                         redirectErrorStream(true)
                     }
                     .start()
-                val probeOut = probeProcess.inputStream.bufferedReader().readText()
-                probeProcess.waitFor(15, java.util.concurrent.TimeUnit.SECONDS)
-                addLog("proot 诊断:\n$probeOut")
+                val testOut = testProcess.inputStream.bufferedReader().readText()
+                val testExit = testProcess.waitFor(10, java.util.concurrent.TimeUnit.SECONDS)
+                if (testExit && testProcess.exitValue() == 0) {
+                    addLog("proot 最小验证通过: $testOut")
+                } else {
+                    val exitCode = if (testExit) testProcess.exitValue() else -999
+                    addLog("proot 最小验证失败! exit=$exitCode, output=$testOut")
+                }
             } catch (e: Exception) {
-                addLog("proot 诊断执行失败: ${e.message}")
+                addLog("proot 最小验证异常: ${e.javaClass.simpleName}: ${e.message}")
             }
-            addLog("--- 诊断结束 ---")
+            addLog("--- 验证结束 ---")
 
             // 构建启动命令 — 尝试 exec-server（Codex 0.133.0 标准子命令）
             addLog("通过 proot 启动 Codex exec-server...")
