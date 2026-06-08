@@ -4,7 +4,6 @@ import android.widget.Toast
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -13,13 +12,13 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.codex.android.codex.github.GitHubApiClient
+import com.codex.android.core.designsystem.*
 import kotlinx.coroutines.launch
 
 /**
@@ -79,9 +78,10 @@ fun GitHubPRScreen(
 
     LaunchedEffect(Unit) { loadPRs() }
 
-    if (selectedPR != null) {
+    val currentPR = selectedPR
+    if (currentPR != null) {
         PRDetailScreen(
-            pr = selectedPR!!,
+            pr = currentPR,
             comments = comments,
             commentsLoading = commentsLoading,
             newComment = newComment,
@@ -91,10 +91,10 @@ fun GitHubPRScreen(
                 if (newComment.isBlank()) return@PRDetailScreen
                 isCommenting = true
                 scope.launch {
-                    apiClient.createPRComment(owner, repo, selectedPR!!.number, newComment).onSuccess {
+                    apiClient.createPRComment(owner, repo, currentPR.number, newComment).onSuccess {
                         newComment = ""
                         commentsLoading = true
-                        apiClient.listPRComments(owner, repo, selectedPR!!.number).onSuccess {
+                        apiClient.listPRComments(owner, repo, currentPR.number).onSuccess {
                             comments = it
                         }
                         commentsLoading = false
@@ -164,7 +164,7 @@ fun GitHubPRScreen(
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface
+                    containerColor = CxSurface
                 )
             )
         },
@@ -204,12 +204,13 @@ fun GitHubPRScreen(
                     CircularProgressIndicator()
                 }
             } else if (errorMessage != null) {
+                val msg = errorMessage ?: return
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text(errorMessage!!, color = Color(0xFFFF4757))
+                    Text(msg, color = CxError)
                 }
             } else if (prs.isEmpty()) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text("暂无 Pull Request", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("暂无 Pull Request", color = CxTextSecondary)
                 }
             } else {
                 LazyColumn(
@@ -247,21 +248,21 @@ private fun PRCard(
         onClick = onClick,
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+            containerColor = CxSurface.copy(alpha = 0.5f)
         )
     ) {
         Column(modifier = Modifier.padding(12.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Surface(
                     shape = RoundedCornerShape(50),
-                    color = if (pr.state == "open") Color(0xFF2ED573).copy(alpha = 0.15f)
-                    else Color(0xFFFF4757).copy(alpha = 0.15f)
+                    color = if (pr.state == "open") CxOnline.copy(alpha = 0.15f)
+                    else CxError.copy(alpha = 0.15f)
                 ) {
                     Icon(
                         if (pr.state == "open") Icons.Default.AccountTree else Icons.Default.Close,
                         null,
                         modifier = Modifier.size(20.dp).padding(2.dp),
-                        tint = if (pr.state == "open") Color(0xFF2ED573) else Color(0xFFFF4757)
+                        tint = if (pr.state == "open") CxOnline else CxError
                     )
                 }
                 Spacer(Modifier.width(8.dp))
@@ -272,9 +273,9 @@ private fun PRCard(
             }
             Spacer(Modifier.height(6.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(pr.userLogin, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Text("${pr.headBranch} → ${pr.baseBranch}", fontSize = 11.sp, color = MaterialTheme.colorScheme.primary)
-                Text(pr.createdAt.take(10), fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(pr.userLogin, fontSize = 11.sp, color = CxTextSecondary)
+                Text("${pr.headBranch} → ${pr.baseBranch}", fontSize = 11.sp, color = CxPrimary)
+                Text(pr.createdAt.take(10), fontSize = 11.sp, color = CxTextSecondary)
             }
         }
     }
@@ -303,7 +304,7 @@ private fun PRDetailScreen(
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface
+                    containerColor = CxSurface
                 )
             )
         }
@@ -318,8 +319,8 @@ private fun PRDetailScreen(
                         Text(pr.title, fontWeight = FontWeight.Bold, fontSize = 18.sp)
                         Spacer(Modifier.height(4.dp))
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Text("by ${pr.userLogin}", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            Text(pr.createdAt.take(10), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text("by ${pr.userLogin}", fontSize = 12.sp, color = CxTextSecondary)
+                            Text(pr.createdAt.take(10), fontSize = 12.sp, color = CxTextSecondary)
                         }
                         Spacer(Modifier.height(8.dp))
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -361,14 +362,14 @@ private fun PRDetailScreen(
                     Card(
                         modifier = Modifier.fillMaxWidth(),
                         colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+                            containerColor = CxSurface.copy(alpha = 0.3f)
                         )
                     ) {
                         Column(modifier = Modifier.padding(12.dp)) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Text(comment.userLogin, fontWeight = FontWeight.Medium, fontSize = 13.sp)
                                 Spacer(Modifier.width(8.dp))
-                                Text(comment.createdAt.take(10), fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text(comment.createdAt.take(10), fontSize = 11.sp, color = CxTextSecondary)
                             }
                             Spacer(Modifier.height(6.dp))
                             Text(comment.body, fontSize = 13.sp)
@@ -434,7 +435,7 @@ private fun CreatePRScreen(
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface
+                    containerColor = CxSurface
                 )
             )
         }
@@ -443,7 +444,7 @@ private fun CreatePRScreen(
             modifier = Modifier.fillMaxSize().padding(padding).padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Text("仓库: $repoFullName", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("仓库: $repoFullName", fontSize = 13.sp, color = CxTextSecondary)
 
             OutlinedTextField(
                 value = title,

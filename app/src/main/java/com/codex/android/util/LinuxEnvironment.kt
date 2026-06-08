@@ -287,7 +287,9 @@ class LinuxEnvironment(private val context: Context) {
                         } else if (entry.isSymbolicLink) {
                             try {
                                 Os.symlink(entry.linkName ?: "", target.path)
-                            } catch (_: Exception) {}
+                            } catch (e: Exception) {
+                                Log.w(TAG, "symlink failed, continuing anyway", e)
+                            }
                         } else {
                             target.parentFile?.mkdirs()
                             FileOutputStream(target).use { out ->

@@ -203,30 +203,33 @@ class CodexManager(private val context: Context) {
     fun importBinary(sourceFile: File): Boolean = importBinaryChecked(sourceFile).success
 
     /**
-     * 检查 Codex 二进制文件完整性
+     * 验证文件完整性（给定 SHA256 哈希）。
+     * @param file 要验证的文件
+     * @param expectedHash 期望的 SHA256 哈希（十六进制），传 null 则跳过校验
+     * @return true 表示文件存在且（如提供哈希）校验通过
      */
-    fun verifyBinary(): Boolean {
-        if (!codexBinary.exists()) return false
-        if (codexBinary.length() < 10_000_000) return false // 至少 10MB
-
-        // 检查 ELF 头部
-        try {
-            val header = ByteArray(4)
-            RandomAccessFile(codexBinary, "r").use { raf ->
-                raf.readFully(header)
+    fun verifyFileIntegrity(file: File, expectedHash: String? = null): Boolean {
+        if (!file.exists() || file.length() == 0L) return false
+        if (expectedHash == null) return true
+        return try {
+            val digest = java.security.MessageDigest.getInstance("SHA-256")
+            FileInputStream(file).use { input ->
+                val buffer = ByteArray(8192)
+                var read: Int
+                while (input.read(buffer).also { read = it } != -1) {
+                    digest.update(buffer, 0, read)
+                }
             }
-            // ELF magic: 0x7F 0x45 0x4C 0x46
-            return header[0] == 0x7F.toByte() &&
-                   header[1] == 0x45.toByte() &&
-                   header[2] == 0x4C.toByte() &&
-                   header[3] == 0x46.toByte()
+            val actual = digest.digest().joinToString("") { "%02x".format(it) }
+            actual.equals(expectedHash, ignoreCase = true)
         } catch (e: Exception) {
-            return false
+            Log.w(TAG, "完整性校验失败", e)
+            false
         }
     }
 
     /**
-     * 下载 Codex CLI（带进度回调）
+     * 下载 Codex CLI（带进度回调，原子性写入）
      */
     suspend fun downloadWithProgress(
         version: String = CODEX_VERSION,
@@ -241,27 +244,97 @@ class CodexManager(private val context: Context) {
             return@withContext false
         }
         val urls = buildMirrorUrls(version, arch)
+        val tempFile = File(codexDir, "codex.tar.gz.tmp")
 
         // 遍历所有镜像源，直到有一个成功
         for ((index, mirrorUrl) in urls.withIndex()) {
             try {
                 Log.i(TAG, "尝试下载源 #${index + 1}: $mirrorUrl")
-                val success = downloadFromUrl(mirrorUrl, onProgressCallback)
+                tempFile.delete() // 清理可能残留的临时文件
+                val success = downloadFromUrlToFile(mirrorUrl, tempFile, onProgressCallback)
                 if (success) {
+                    // 原子性重命名
+                    if (!tempFile.renameTo(archiveFile)) {
+                        tempFile.copyTo(archiveFile, overwrite = true)
+                        tempFile.delete()
+                    }
                     Log.i(TAG, "从源 #${index + 1} 下载成功")
                     return@withContext true
                 }
             } catch (e: Exception) {
                 Log.w(TAG, "源 #${index + 1} 下载失败: ${e.message}")
+                tempFile.delete() // 清理失败的临时文件
             }
         }
 
         Log.e(TAG, "所有下载源均不可用")
+        tempFile.delete()
         false
     }
 
     /**
-     * 从指定 URL 下载
+     * 检查 Codex 二进制文件完整性（向后兼容）。
+     */
+    fun verifyBinary(): Boolean {
+        if (!codexBinary.exists()) return false
+        if (codexBinary.length() < 10_000_000) return false
+        try {
+            val header = ByteArray(4)
+            RandomAccessFile(codexBinary, "r").use { raf ->
+                raf.readFully(header)
+            }
+            return header[0] == 0x7F.toByte() &&
+                   header[1] == 0x45.toByte() &&
+                   header[2] == 0x4C.toByte() &&
+                   header[3] == 0x46.toByte()
+        } catch (e: Exception) {
+            return false
+        }
+    }
+
+    /**
+     * 从指定 URL 下载到指定文件（而非固定 archiveFile）。
+     */
+    private fun downloadFromUrlToFile(
+        urlString: String,
+        target: File,
+        onProgressCallback: ((progress: Long, total: Long) -> Unit)? = null
+    ): Boolean {
+        val url = URL(urlString)
+        val connection = url.openConnection() as HttpURLConnection
+        connection.connectTimeout = CONNECT_TIMEOUT_MS
+        connection.readTimeout = 120_000
+        connection.instanceFollowRedirects = true
+        connection.setRequestProperty("Accept", "application/octet-stream")
+        connection.setRequestProperty("User-Agent", "Codex-Android/1.0")
+        connection.connect()
+
+        val responseCode = connection.responseCode
+        if (responseCode != HttpURLConnection.HTTP_OK) {
+            throw IOException("HTTP $responseCode for $urlString")
+        }
+
+        val contentLength = connection.contentLength.toLong()
+        Log.i(TAG, "开始下载 (大小: ${contentLength / 1024 / 1024}MB)")
+
+        connection.inputStream.use { input ->
+            FileOutputStream(target).use { output ->
+                val buffer = ByteArray(8192)
+                var bytesRead: Int
+                var totalBytesRead: Long = 0
+                while (input.read(buffer).also { bytesRead = it } != -1) {
+                    output.write(buffer, 0, bytesRead)
+                    totalBytesRead += bytesRead
+                    onProgressCallback?.invoke(totalBytesRead, contentLength)
+                }
+            }
+        }
+        Log.i(TAG, "下载完成: ${target.length()} bytes")
+        return true
+    }
+
+    /**
+     * 从指定 URL 下载（向后兼容）。
      */
     private fun downloadFromUrl(
         urlString: String,

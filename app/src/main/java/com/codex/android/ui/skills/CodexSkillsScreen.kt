@@ -44,17 +44,48 @@ fun CodexSkillsScreen(
         availableSkills = repo.getAvailableSkills()
     }
     var selectedTab by remember { mutableIntStateOf(0) }
+    var searchQuery by remember { mutableStateOf("") }
+    var showSearch by remember { mutableStateOf(false) }
+
+    // 根据搜索过滤
+    val filteredInstalled = remember(installedSkills, searchQuery) {
+        if (searchQuery.isBlank()) installedSkills
+        else installedSkills.filter { it.name.contains(searchQuery, ignoreCase = true) || it.description.contains(searchQuery, ignoreCase = true) }
+    }
+    val filteredAvailable = remember(availableSkills, searchQuery) {
+        if (searchQuery.isBlank()) availableSkills
+        else availableSkills.filter { it.name.contains(searchQuery, ignoreCase = true) || it.description.contains(searchQuery, ignoreCase = true) }
+    }
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Codex Skills", fontSize = 18.sp) },
+                title = {
+                    if (showSearch) {
+                        OutlinedTextField(
+                            value = searchQuery,
+                            onValueChange = { searchQuery = it },
+                            placeholder = { Text("搜索 Skills...", fontSize = 14.sp) },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                unfocusedBorderColor = Color.Transparent,
+                                focusedBorderColor = Color.Transparent
+                            )
+                        )
+                    } else {
+                        Text("Codex Skills", fontSize = 18.sp)
+                    }
+                },
                 navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "返回")
+                    IconButton(onClick = if (showSearch) { { showSearch = false; searchQuery = "" } } else onBack) {
+                        Icon(if (showSearch) Icons.Default.Close else Icons.AutoMirrored.Filled.ArrowBack, "返回")
                     }
                 },
                 actions = {
+                    IconButton(onClick = { showSearch = true }) {
+                        Icon(Icons.Default.Search, "搜索")
+                    }
                     IconButton(onClick = { showAddMarketDialog = true }) {
                         Icon(Icons.Default.Add, "添加市场")
                     }
@@ -70,23 +101,28 @@ fun CodexSkillsScreen(
                 .fillMaxSize()
                 .padding(padding)
         ) {
+            // 分类过滤 Chips
+            CategoryFilterRow { category ->
+                searchQuery = category
+            }
+
             // Tab 切换
             TabRow(selectedTabIndex = selectedTab) {
                 Tab(
                     selected = selectedTab == 0,
                     onClick = { selectedTab = 0 },
-                    text = { Text("已安装 (${installedSkills.size})") }
+                    text = { Text("已安装 (${filteredInstalled.size})") }
                 )
                 Tab(
                     selected = selectedTab == 1,
                     onClick = { selectedTab = 1 },
-                    text = { Text("可用 (${availableSkills.size})") }
+                    text = { Text("可用 (${filteredAvailable.size})") }
                 )
             }
 
             when (selectedTab) {
                 0 -> InstalledSkillsTab(
-                    skills = installedSkills.map { it.toSkillItem() },
+                    skills = filteredInstalled.map { it.toSkillItem() },
                     onRemove = { name ->
                         scope.launch {
                             repo.removeSkill(name)
@@ -97,7 +133,7 @@ fun CodexSkillsScreen(
                     }
                 )
                 1 -> AvailableSkillsTab(
-                    skills = availableSkills.map { it.toSkillItem() },
+                    skills = filteredAvailable.map { it.toSkillItem() },
                     onInstall = { skill ->
                         scope.launch {
                             repo.installSkill(skill.name)
@@ -111,7 +147,7 @@ fun CodexSkillsScreen(
         }
     }
 
-    // 添加市场对话框
+    // 添加市场对话框 (保持不变)
     if (showAddMarketDialog) {
         AlertDialog(
             onDismissRequest = { showAddMarketDialog = false },
@@ -146,6 +182,42 @@ fun CodexSkillsScreen(
                 TextButton(onClick = { showAddMarketDialog = false }) { Text("取消") }
             }
         )
+    }
+}
+
+/**
+ * 分类筛选行 — 快速按类型过滤 Skills
+ */
+@Composable
+private fun CategoryFilterRow(onFilter: (String) -> Unit) {
+    val categories = listOf(
+        "" to "全部",
+        "开发" to "开发",
+        "工具" to "工具",
+        "安全" to "安全",
+        "网络" to "网络",
+        "文档" to "文档"
+    )
+    var selected by remember { mutableStateOf("") }
+
+    ScrollableTabRow(
+        selectedTabIndex = categories.indexOfFirst { it.first == selected }.coerceAtLeast(0),
+        modifier = Modifier.fillMaxWidth(),
+        edgePadding = 12.dp,
+        divider = {}
+    ) {
+        categories.forEach { (key, label) ->
+            Tab(
+                selected = selected == key,
+                onClick = {
+                    selected = key
+                    onFilter(key)
+                },
+                text = {
+                    Text(label, fontSize = 12.sp, fontWeight = FontWeight.Medium)
+                }
+            )
+        }
     }
 }
 

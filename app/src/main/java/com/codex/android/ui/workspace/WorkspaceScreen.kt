@@ -53,6 +53,7 @@ fun WorkspaceScreen(
     onOpenDiagnostic: () -> Unit = {},
     onOpenFileBrowser: (() -> Unit)? = null,
     onOpenAbout: (() -> Unit)? = null,
+    onOpenAIChat: (() -> Unit)? = null,
     onToggleRuntime: () -> Unit,
     onExportFile: ((String) -> Unit)? = null
 ) {
@@ -77,7 +78,8 @@ fun WorkspaceScreen(
             onOpenDiagnostic = onOpenDiagnostic,
             onOpenSettings = onOpenSettings,
             onOpenFileBrowser = onOpenFileBrowser,
-            onOpenAbout = onOpenAbout
+            onOpenAbout = onOpenAbout,
+            onOpenAIChat = onOpenAIChat
         )
 
         // Main content area with WebView
@@ -305,7 +307,8 @@ private fun WorkspaceTopBar(
     onOpenDiagnostic: () -> Unit,
     onOpenSettings: () -> Unit,
     onOpenFileBrowser: (() -> Unit)?,
-    onOpenAbout: (() -> Unit)?
+    onOpenAbout: (() -> Unit)?,
+    onOpenAIChat: (() -> Unit)?
 ) {
     var showMenu by remember { mutableStateOf(false) }
 
@@ -384,6 +387,17 @@ private fun WorkspaceTopBar(
                     contentDescription = "GitHub",
                     tint = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+            }
+
+            // AI Chat button
+            if (onOpenAIChat != null) {
+                IconButton(onClick = onOpenAIChat) {
+                    Icon(
+                        Icons.Outlined.Chat,
+                        contentDescription = "AI 对话",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
             }
 
             // MCP button

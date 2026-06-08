@@ -7,6 +7,7 @@ import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import org.json.JSONObject
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
@@ -105,7 +106,70 @@ class CodexAgentProvider(
 
     fun sendPrompt(prompt: String) {
         val b = bridge ?: run { onError?.invoke("未连接到 Codex exec-server"); return }
-        b.onMessage = { msg -> onStreamMessage?.invoke(msg) }
+        b.onMessage = { msg -> 
+            // 解析流式消息：尝试提取 content 字段
+            try {
+                val json = org.json.JSONObject(msg)
+                val content = if (json.has("method") && json.getString("method") == "response") {
+                    json.optJSONObject("params")?.optString("content", msg) ?: msg
+                } else {
+                    msg
+                }
+                onStreamMessage?.invoke(content)
+            } catch (e: Exception) {
+                // 无法解析为 JSON，原样传递
+                onStreamMessage?.invoke(msg)
+            }
+        }
+        b.sendPrompt(prompt)
+    }
+
+    /**
+     * 发送流式提示，逐块回调
+     */
+    fun sendPromptStream(
+        prompt: String,
+        onChunk: (String) -> Unit,
+        onComplete: (() -> Unit)? = null,
+        onError: ((String) -> Unit)? = null
+    ) {
+        val b = bridge ?: run { onError?.invoke("未连接到 Codex exec-server"); return }
+
+        val originalOnMessage = b.onMessage
+        val buffer = StringBuilder()
+
+        b.onMessage = { msg ->
+            try {
+                val json = org.json.JSONObject(msg)
+                if (json.has("method") && json.getString("method") == "response") {
+                    val params = json.optJSONObject("params") ?: json
+                    val content = params.optString("content", "")
+                    val isFinal = params.optBoolean("isFinal", false) || 
+                                  params.optBoolean("done", false)
+
+                    if (content.isNotEmpty()) {
+                        buffer.append(content)
+                        onChunk(content)
+                    }
+
+                    if (isFinal) {
+                        b.onMessage = originalOnMessage
+                        onComplete?.invoke()
+                    }
+                } else if (json.has("id") && json.has("result")) {
+                    // 最终结果
+                    b.onMessage = originalOnMessage
+                    onComplete?.invoke()
+                } else {
+                    // 其他消息原样传递
+                    originalOnMessage?.invoke(msg)
+                }
+            } catch (e: Exception) {
+                // 非 JSON 消息，直接当 chunk 处理
+                onChunk(msg)
+            }
+        }
+
         b.sendPrompt(prompt)
     }
 

@@ -77,6 +77,8 @@ class CodexRuntimeService : Service() {
 
     private val serviceScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private val logsLock = Any()
+    private var totalLogCount = 0
+    private const val MAX_LOG_ENTRIES = 200
     private lateinit var codexManager: CodexManager
     private lateinit var devEnv: DevelopmentEnvironment
     private var codexProcess: java.lang.Process? = null
@@ -465,8 +467,9 @@ class CodexRuntimeService : Service() {
     private fun addLog(message: String) {
         val timestamp = java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.getDefault()).format(java.util.Date())
         synchronized(logsLock) {
+            totalLogCount++
             val newLogs = _logs.value + "[$timestamp] $message"
-            _logs.value = if (newLogs.size > 500) newLogs.takeLast(200) else newLogs
+            _logs.value = if (newLogs.size > MAX_LOG_ENTRIES * 2) newLogs.takeLast(MAX_LOG_ENTRIES) else newLogs
         }
         Log.d(TAG, message)
     }

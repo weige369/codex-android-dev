@@ -8,6 +8,7 @@ import java.io.BufferedReader
 import java.io.InputStreamReader
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.ConcurrentLinkedDeque
 import java.util.concurrent.atomic.AtomicInteger
 
 /**
@@ -46,7 +47,7 @@ object AndroidShellExecutor {
     )
 
     private val activeProcesses = ConcurrentHashMap<Int, Process>()
-    private val processHistory = mutableListOf<ProcessInfo>()
+    private val processHistory = ConcurrentLinkedDeque<ProcessInfo>()
     private val pidCounter = AtomicInteger(0)
 
     // 开发环境管理器（由外部初始化）
@@ -91,6 +92,9 @@ object AndroidShellExecutor {
                 activeProcesses.remove(id)
                 ShellResult(-1, stdout.toString(), stderr.toString(), isTimedOut = true, permissionLevel = permissionLevel)
             } else {
+                // 线程 join 后额外用 readText() 兜底，确保所有输出已被读取
+                try { stdout.append(process.inputStream.bufferedReader().readText()) } catch (_: Exception) {}
+                try { stderr.append(process.errorStream.bufferedReader().readText()) } catch (_: Exception) {}
                 activeProcesses.remove(id)
                 ShellResult(process.exitValue(), stdout.toString(), stderr.toString(), permissionLevel = permissionLevel)
             }
@@ -157,7 +161,7 @@ object AndroidShellExecutor {
             val line = reader.readLine()
             process.destroy()
             line != null
-        } catch (_: Exception) { false }
+        } catch (e: Exception) { Log.w(TAG, "Root 检测失败", e); false }
     }
 
 }

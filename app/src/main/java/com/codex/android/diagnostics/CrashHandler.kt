@@ -3,6 +3,7 @@ package com.codex.android.diagnostics
 import android.content.Context
 import android.os.Build
 import android.os.Process
+import android.util.Log
 import java.io.File
 import java.io.FileWriter
 import java.io.PrintWriter
@@ -58,10 +59,14 @@ class CrashHandler(private val context: Context) {
                                 prefs.githubToken
                             )
                         }
-                    } catch (_: Exception) {}
+                    } catch (e: Exception) {
+                        Log.w(TAG, "Auto upload crash failed", e)
+                    }
                 }.start()
             }
-        } catch (_: Exception) {}
+        } catch (e: Exception) {
+            Log.w(TAG, "autoUploadCrash failed", e)
+        }
     }
 
     private fun createDummyReport(context: Context, crashText: String): com.codex.android.diagnostics.DiagnosticsRunner.DiagnosticsReport {
@@ -76,7 +81,10 @@ class CrashHandler(private val context: Context) {
     }
 
     private fun buildCrashReportText(crashFile: File): String {
-        return try { crashFile.readText() } catch (_: Exception) { "无法读取崩溃日志" }
+        return try { crashFile.readText() } catch (e: Exception) {
+            Log.w(TAG, "Failed to read crash file", e)
+            "无法读取崩溃日志"
+        }
     }
 
     /**
@@ -90,7 +98,9 @@ class CrashHandler(private val context: Context) {
         Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
             try {
                 val crashFile = saveCrashReport(throwable)
-                try { onCrashCaptured?.invoke(crashFile) } catch (_: Exception) {}
+                try { onCrashCaptured?.invoke(crashFile) } catch (e: Exception) {
+                    Log.w(TAG, "onCrashCaptured callback failed", e)
+                }
             } catch (e: Exception) {
                 android.util.Log.e(TAG, "崩溃处理异常", e)
             }
@@ -98,7 +108,9 @@ class CrashHandler(private val context: Context) {
             // 传递给默认处理器
             try {
                 defaultHandler?.uncaughtException(thread, throwable)
-            } catch (_: Exception) {}
+            } catch (e: Exception) {
+                Log.w(TAG, "defaultHandler uncaughtException failed", e)
+            }
             Process.killProcess(Process.myPid())
         }
     }

@@ -128,12 +128,13 @@ fun DevEnvironmentScreen(
 
 
             // ===== 工具列表 =====
-            if (envInfo?.state == DevelopmentEnvironment.EnvState.SELF_CONTAINED_LINUX) {
+            val currentEnv = envInfo
+            if (currentEnv?.state == DevelopmentEnvironment.EnvState.SELF_CONTAINED_LINUX) {
                 item {
                     SectionTitle("已安装环境")
                 }
                 item {
-                    ToolStatusList(envInfo!!)
+                    ToolStatusList(currentEnv)
                 }
             }
             item {
@@ -211,18 +212,19 @@ fun DevEnvironmentScreen(
             }
 
             // ===== 已安装工具列表 =====
-            if (envInfo != null && envInfo!!.state != DevelopmentEnvironment.EnvState.ERROR) {
+            val env = envInfo
+            if (env != null && env.state != DevelopmentEnvironment.EnvState.ERROR) {
                 item {
                     SectionTitle("已安装环境")
                 }
 
                 item {
-                    ToolStatusList(envInfo!!)
+                    ToolStatusList(env)
                 }
             }
 
             // ===== 已安装工具详情 =====
-            if (envInfo != null && envInfo!!.state != DevelopmentEnvironment.EnvState.ERROR) {
+            if (env != null && env.state != DevelopmentEnvironment.EnvState.ERROR) {
                 item {
                     SectionTitle("工具版本")
                 }

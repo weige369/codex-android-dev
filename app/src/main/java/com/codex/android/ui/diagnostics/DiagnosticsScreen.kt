@@ -316,9 +316,10 @@ fun DiagnosticsScreen(onBack: () -> Unit = {}) {
             }
 
             if (uploadResult != null) {
+                val result = uploadResult ?: "Unknown"
                 item {
                     Surface(shape = RoundedCornerShape(8.dp), color = MaterialTheme.colorScheme.surfaceVariant) {
-                        Text(uploadResult!!, modifier = Modifier.padding(12.dp), fontSize = 12.sp, fontFamily = FontFamily.Monospace)
+                        Text(result, modifier = Modifier.padding(12.dp), fontSize = 12.sp, fontFamily = FontFamily.Monospace)
                     }
                 }
             }

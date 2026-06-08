@@ -712,9 +712,10 @@ private fun ManualImportCard(
             }
 
             if (importStatus != null) {
+                val status = importStatus ?: "Unknown"
                 Spacer(Modifier.height(8.dp))
                 Text(
-                    importStatus!!,
+                    status,
                     fontSize = 12.sp,
                     color = when {
                         isImporting -> MaterialTheme.colorScheme.onSurfaceVariant

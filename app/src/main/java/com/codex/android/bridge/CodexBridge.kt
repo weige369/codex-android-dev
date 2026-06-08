@@ -45,6 +45,7 @@ class CodexBridge(
         DISCONNECTED,
         CONNECTING,
         CONNECTED,
+        RECONNECTING,
         ERROR
     }
 
@@ -58,6 +59,10 @@ class CodexBridge(
     var onMessage: ((String) -> Unit)? = null
     var onError: ((String) -> Unit)? = null
     var onConnectionChange: ((ConnectionState) -> Unit)? = null
+    var onReconnecting: ((attempt: Int) -> Unit)? = null
+
+    // 是否允许自动重连
+    var shouldReconnect = MutableStateFlow(true)
 
     // 等待响应的请求
     private val pendingRequests = ConcurrentHashMap<String, CompletableDeferred<String>>()
@@ -84,14 +89,24 @@ class CodexBridge(
                         handleMessage(msg)
                     },
                     onError = { error ->
-                        _connectionState.value = ConnectionState.ERROR
+                        if (shouldReconnect.value) {
+                            _connectionState.value = ConnectionState.RECONNECTING
+                            onConnectionChange?.invoke(ConnectionState.RECONNECTING)
+                        } else {
+                            _connectionState.value = ConnectionState.ERROR
+                        }
                         onError?.invoke(error)
-                        onConnectionChange?.invoke(ConnectionState.ERROR)
+                        onConnectionChange?.invoke(_connectionState.value)
                         Log.e(TAG, "WebSocket 错误: $error")
                     },
                     onClose = {
-                        _connectionState.value = ConnectionState.DISCONNECTED
-                        onConnectionChange?.invoke(ConnectionState.DISCONNECTED)
+                        if (shouldReconnect.value) {
+                            _connectionState.value = ConnectionState.RECONNECTING
+                            onConnectionChange?.invoke(ConnectionState.RECONNECTING)
+                        } else {
+                            _connectionState.value = ConnectionState.DISCONNECTED
+                        }
+                        onConnectionChange?.invoke(_connectionState.value)
                         Log.i(TAG, "WebSocket 已关闭")
                     }
                 )
@@ -269,14 +284,32 @@ class CodexBridge(
 }
 
 /**
- * 简单的 OkHttp WebSocket 封装
+ * 简单的 OkHttp WebSocket 封装，支持自动重连。
  */
 class OkHttpWebSocket(private val url: String) {
     private var webSocket: okhttp3.WebSocket? = null
+    private var reconnectAttempts = 0
+    private var isManualClose = false
+    private var reconnectJob: kotlinx.coroutines.Job? = null
+    private val scope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO + kotlinx.coroutines.SupervisorJob())
+    
+    // 重连配置
+    companion object {
+        private const val MAX_RECONNECT_ATTEMPTS = 10
+        private const val BASE_DELAY_MS = 1000L
+        private const val MAX_DELAY_MS = 60_000L
+    }
+
     private val client = okhttp3.OkHttpClient.Builder()
         .connectTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
         .readTimeout(0, java.util.concurrent.TimeUnit.MILLISECONDS)
+        .pingInterval(30, java.util.concurrent.TimeUnit.SECONDS)
         .build()
+
+    private var onOpen: (() -> Unit)? = null
+    private var onMessage: ((String) -> Unit)? = null
+    private var onError: ((String) -> Unit)? = null
+    private var onClose: (() -> Unit)? = null
 
     fun connect(
         onOpen: () -> Unit,
@@ -284,27 +317,60 @@ class OkHttpWebSocket(private val url: String) {
         onError: (String) -> Unit,
         onClose: () -> Unit
     ) {
+        this.onOpen = onOpen
+        this.onMessage = onMessage
+        this.onError = onError
+        this.onClose = onClose
+        isManualClose = false
+        reconnectAttempts = 0
+        doConnect()
+    }
+
+    private fun doConnect() {
         val request = okhttp3.Request.Builder()
             .url(url)
             .build()
 
         webSocket = client.newWebSocket(request, object : okhttp3.WebSocketListener() {
             override fun onOpen(ws: okhttp3.WebSocket, response: okhttp3.Response) {
-                onOpen()
+                reconnectAttempts = 0
+                onOpen?.invoke()
             }
 
             override fun onMessage(ws: okhttp3.WebSocket, text: String) {
-                onMessage(text)
+                onMessage?.invoke(text)
             }
 
             override fun onFailure(ws: okhttp3.WebSocket, t: Throwable, response: okhttp3.Response?) {
-                onError(t.message ?: "未知错误")
+                val msg = t.message ?: "未知错误"
+                onError?.invoke(msg)
+                scheduleReconnect()
             }
 
             override fun onClosed(ws: okhttp3.WebSocket, code: Int, reason: String) {
-                onClose()
+                if (!isManualClose) {
+                    onClose?.invoke()
+                    scheduleReconnect()
+                } else {
+                    onClose?.invoke()
+                }
             }
         })
+    }
+
+    private fun scheduleReconnect() {
+        if (isManualClose || reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) return
+        
+        reconnectJob?.cancel()
+        val delayMs = (BASE_DELAY_MS * (1L shl reconnectAttempts.coerceAtMost(5)))
+            .coerceAtMost(MAX_DELAY_MS)
+        
+        reconnectJob = scope.launch {
+            kotlinx.coroutines.delay(delayMs)
+            reconnectAttempts++
+            android.util.Log.i("OkHttpWebSocket", "重连尝试 $reconnectAttempts/$MAX_RECONNECT_ATTEMPTS (${delayMs}ms 后)")
+            doConnect()
+        }
     }
 
     fun send(message: String): Boolean {
@@ -312,8 +378,12 @@ class OkHttpWebSocket(private val url: String) {
     }
 
     fun close() {
+        isManualClose = true
+        reconnectJob?.cancel()
+        reconnectJob = null
         webSocket?.close(1000, "客户端关闭")
         webSocket = null
+        scope.cancel()
     }
 }
 

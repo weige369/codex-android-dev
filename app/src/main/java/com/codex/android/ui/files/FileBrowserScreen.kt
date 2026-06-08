@@ -209,10 +209,11 @@ fun FileBrowserScreen(
     }
 
     if (showDeleteConfirm && fileToDelete != null) {
+        val deleteTarget = fileToDelete ?: return
         AlertDialog(onDismissRequest = { showDeleteConfirm = false }, title = { Text("确认删除") },
-            text = { Text("确定要删除「${fileToDelete!!.name}」吗？\n此操作不可撤销。") },
+            text = { Text("确定要删除「${deleteTarget.name}」吗？\n此操作不可撤销。") },
             confirmButton = { TextButton(onClick = {
-                WorkspaceFileManager.deleteFile(File(fileToDelete!!.path))
+                WorkspaceFileManager.deleteFile(File(deleteTarget.path))
                 files = WorkspaceFileManager.scanDirectory(currentDir)
                 showDeleteConfirm = false; fileToDelete = null; snackbarMessage = "已删除"
             }) { Text("删除", color = MaterialTheme.colorScheme.error) }},
@@ -221,11 +222,12 @@ fun FileBrowserScreen(
     }
 
     if (showRenameDialog && renameTarget != null) {
+        val renameSource = renameTarget ?: return
         AlertDialog(onDismissRequest = { showRenameDialog = false }, title = { Text("重命名") },
             text = { OutlinedTextField(value = newName, onValueChange = { newName = it }, label = { Text("新名称") }, singleLine = true, modifier = Modifier.fillMaxWidth()) },
             confirmButton = { TextButton(onClick = {
                 if (newName.isNotBlank()) {
-                    WorkspaceFileManager.renameFile(File(renameTarget!!.path), newName)
+                    WorkspaceFileManager.renameFile(File(renameSource.path), newName)
                     files = WorkspaceFileManager.scanDirectory(currentDir); showRenameDialog = false; snackbarMessage = "已重命名"
                 }
             }) { Text("确定") }},
@@ -233,8 +235,9 @@ fun FileBrowserScreen(
         )
     }
 
-    if (showDetailFile != null) {
-        val detail = showDetailFile!!
+    val detailFile = showDetailFile
+    if (detailFile != null) {
+        val detail = detailFile
         AlertDialog(onDismissRequest = { showDetailFile = null }, title = { Text("文件详情") },
             text = { Column {
                 DetailRow("名称", detail.name); DetailRow("路径", detail.path)

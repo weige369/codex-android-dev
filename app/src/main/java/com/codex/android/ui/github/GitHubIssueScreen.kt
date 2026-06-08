@@ -4,7 +4,7 @@ import android.widget.Toast
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
+
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
@@ -12,12 +12,13 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
+
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.codex.android.codex.github.GitHubApiClient
+import com.codex.android.core.designsystem.*
 import kotlinx.coroutines.launch
 
 /**
@@ -76,9 +77,10 @@ fun GitHubIssueScreen(
 
     LaunchedEffect(Unit) { loadIssues() }
 
-    if (selectedIssue != null) {
+    val currentIssue = selectedIssue
+    if (currentIssue != null) {
         IssueDetailScreen(
-            issue = selectedIssue!!,
+            issue = currentIssue,
             comments = comments,
             commentsLoading = commentsLoading,
             newComment = newComment,
@@ -88,10 +90,10 @@ fun GitHubIssueScreen(
                 if (newComment.isBlank()) return@IssueDetailScreen
                 isCommenting = true
                 scope.launch {
-                    apiClient.createIssueComment(owner, repo, selectedIssue!!.number, newComment).onSuccess {
+                    apiClient.createIssueComment(owner, repo, currentIssue.number, newComment).onSuccess {
                         newComment = ""
                         commentsLoading = true
-                        apiClient.listIssueComments(owner, repo, selectedIssue!!.number).onSuccess {
+                        apiClient.listIssueComments(owner, repo, currentIssue.number).onSuccess {
                             comments = it
                         }
                         commentsLoading = false
@@ -101,7 +103,7 @@ fun GitHubIssueScreen(
             },
             onCloseIssue = {
                 scope.launch {
-                    apiClient.closeIssue(owner, repo, selectedIssue!!.number).onSuccess {
+                    apiClient.closeIssue(owner, repo, currentIssue.number).onSuccess {
                         selectedIssue = null
                         loadIssues()
                         Toast.makeText(context, "Issue 已关闭", Toast.LENGTH_SHORT).show()
@@ -166,7 +168,7 @@ fun GitHubIssueScreen(
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface
+                    containerColor = CxSurface
                 )
             )
         },
@@ -206,12 +208,13 @@ fun GitHubIssueScreen(
                     CircularProgressIndicator()
                 }
             } else if (errorMessage != null) {
+                val msg = errorMessage ?: return
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text(errorMessage!!, color = Color(0xFFFF4757))
+                    Text(msg, color = CxError)
                 }
             } else if (issues.isEmpty()) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text("暂无 Issue", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("暂无 Issue", color = CxTextSecondary)
                 }
             } else {
                 LazyColumn(
@@ -249,21 +252,21 @@ private fun IssueCard(
         onClick = onClick,
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+            containerColor = CxSurface.copy(alpha = 0.5f)
         )
     ) {
         Column(modifier = Modifier.padding(12.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Surface(
                     shape = RoundedCornerShape(50),
-                    color = if (issue.state == "open") Color(0xFF2ED573).copy(alpha = 0.15f)
-                    else Color(0xFFFF4757).copy(alpha = 0.15f)
+                    color = if (issue.state == "open") CxOnline.copy(alpha = 0.15f)
+                    else CxError.copy(alpha = 0.15f)
                 ) {
                     Icon(
                         if (issue.state == "open") Icons.Default.BugReport else Icons.Default.CheckCircle,
                         null,
                         modifier = Modifier.size(20.dp).padding(2.dp),
-                        tint = if (issue.state == "open") Color(0xFF2ED573) else Color(0xFFFF4757)
+                        tint = if (issue.state == "open") CxOnline else CxError
                     )
                 }
                 Spacer(Modifier.width(8.dp))
@@ -273,16 +276,16 @@ private fun IssueCard(
             }
             Spacer(Modifier.height(6.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(issue.userLogin, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(issue.userLogin, fontSize = 11.sp, color = CxTextSecondary)
                 issue.labels.take(3).forEach { label ->
                     Surface(
                         shape = RoundedCornerShape(4.dp),
-                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
+                        color = CxPrimary.copy(alpha = 0.15f)
                     ) {
                         Text(label, modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.dp), fontSize = 10.sp)
                     }
                 }
-                Text("${issue.comments} 评论", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("${issue.comments} 评论", fontSize = 11.sp, color = CxTextSecondary)
             }
         }
     }
@@ -319,7 +322,7 @@ private fun IssueDetailScreen(
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface
+                    containerColor = CxSurface
                 )
             )
         }
@@ -334,8 +337,8 @@ private fun IssueDetailScreen(
                         Text(issue.title, fontWeight = FontWeight.Bold, fontSize = 18.sp)
                         Spacer(Modifier.height(4.dp))
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Text("by ${issue.userLogin}", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            Text(issue.createdAt.take(10), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text("by ${issue.userLogin}", fontSize = 12.sp, color = CxTextSecondary)
+                            Text(issue.createdAt.take(10), fontSize = 12.sp, color = CxTextSecondary)
                         }
                         Spacer(Modifier.height(8.dp))
                         AssistChip(
@@ -371,14 +374,14 @@ private fun IssueDetailScreen(
                     Card(
                         modifier = Modifier.fillMaxWidth(),
                         colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+                            containerColor = CxSurface.copy(alpha = 0.3f)
                         )
                     ) {
                         Column(modifier = Modifier.padding(12.dp)) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Text(comment.userLogin, fontWeight = FontWeight.Medium, fontSize = 13.sp)
                                 Spacer(Modifier.width(8.dp))
-                                Text(comment.createdAt.take(10), fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text(comment.createdAt.take(10), fontSize = 11.sp, color = CxTextSecondary)
                             }
                             Spacer(Modifier.height(6.dp))
                             Text(comment.body, fontSize = 13.sp)
@@ -440,7 +443,7 @@ private fun CreateIssueScreen(
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface
+                    containerColor = CxSurface
                 )
             )
         }
@@ -449,7 +452,7 @@ private fun CreateIssueScreen(
             modifier = Modifier.fillMaxSize().padding(padding).padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Text("仓库: $repoFullName", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("仓库: $repoFullName", fontSize = 13.sp, color = CxTextSecondary)
 
             OutlinedTextField(
                 value = title,

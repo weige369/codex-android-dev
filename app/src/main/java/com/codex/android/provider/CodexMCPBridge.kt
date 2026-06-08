@@ -145,6 +145,27 @@ class CodexMCPBridge(private val context: Context) {
                     val content = File(path).readText()
                     "{\"success\":true,\"content\":\"${content.replace("\"", "\\\"").take(10000)}\"}"
                 }
+                "android_write_file" -> {
+                    val path = args["path"] ?: return "{\"error\":\"path required\"}"
+                    val content = args["content"] ?: return "{\"error\":\"content required\"}"
+                    com.codex.android.security.SecurityPolicy.checkFileAccess(context, path)?.let { return it }
+                    File(path).apply { parentFile?.mkdirs() }.writeText(content)
+                    "{\"success\":true,\"message\":\"文件已写入: $path\"}"
+                }
+                "android_list_directory" -> {
+                    val path = args["path"] ?: "/sdcard"
+                    com.codex.android.security.SecurityPolicy.checkFileAccess(context, path)?.let { return it }
+                    val dir = File(path)
+                    if (!dir.exists() || !dir.isDirectory) return "{\"error\":\"目录不存在: $path\"}"
+                    val entries = dir.listFiles()?.map { f ->
+                        val type = if (f.isDirectory) "dir" else "file"
+                        val size = if (f.isFile) f.length() else 0L
+                        mapOf("name" to f.name, "type" to type, "size" to size)
+                    } ?: emptyList()
+                    val json = org.json.JSONArray()
+                    entries.forEach { json.put(org.json.JSONObject(it)) }
+                    "{\"success\":true,\"path\":\"$path\",\"entries\":${json}}"
+                }
                 "android_shell" -> {
                     if (!com.codex.android.security.SecurityPolicy.isShellAllowed(context)) {
                         return com.codex.android.security.SecurityPolicy.shellDeniedResponse(context)
@@ -160,6 +181,51 @@ class CodexMCPBridge(private val context: Context) {
                     val process = Runtime.getRuntime().exec(arrayOf("/system/bin/sh", "-c", command))
                     val output = process.inputStream.bufferedReader().readText()
                     "{\"success\":true,\"output\":\"${output.replace("\"", "\\\"").take(10000)}\"}"
+                }
+                "android_get_device_info" -> {
+                    val info = org.json.JSONObject().apply {
+                        put("manufacturer", android.os.Build.MANUFACTURER)
+                        put("model", android.os.Build.MODEL)
+                        put("brand", android.os.Build.BRAND)
+                        put("device", android.os.Build.DEVICE)
+                        put("sdk", android.os.Build.VERSION.SDK_INT)
+                        put("release", android.os.Build.VERSION.RELEASE)
+                        put("arch", System.getProperty("os.arch") ?: "unknown")
+                    }
+                    "{\"success\":true,\"device\":${info}}"
+                }
+                "android_screenshot" -> {
+                    val cmd = "screencap -p"
+                    val process = Runtime.getRuntime().exec(arrayOf("/system/bin/sh", "-c", cmd))
+                    val bytes = process.inputStream.readBytes()
+                    val base64 = android.util.Base64.encodeToString(bytes, android.util.Base64.NO_WRAP)
+                    "{\"success\":true,\"screenshot_base64\":\"$base64\"}"
+                }
+                "android_get_battery" -> {
+                    val intent = context.registerReceiver(null, android.content.IntentFilter(android.content.Intent.ACTION_BATTERY_CHANGED))
+                    val level = intent?.getIntExtra(android.os.BatteryManager.EXTRA_LEVEL, -1) ?: -1
+                    val scale = intent?.getIntExtra(android.os.BatteryManager.EXTRA_SCALE, 100) ?: 100
+                    val pct = if (scale > 0) level * 100 / scale else level
+                    val status = when (intent?.getIntExtra(android.os.BatteryManager.EXTRA_STATUS, -1)) {
+                        android.os.BatteryManager.BATTERY_STATUS_CHARGING -> "charging"
+                        android.os.BatteryManager.BATTERY_STATUS_DISCHARGING -> "discharging"
+                        android.os.BatteryManager.BATTERY_STATUS_FULL -> "full"
+                        android.os.BatteryManager.BATTERY_STATUS_NOT_CHARGING -> "not_charging"
+                        else -> "unknown"
+                    }
+                    "{\"success\":true,\"level\":$pct,\"status\":\"$status\"}"
+                }
+                "android_get_network" -> {
+                    val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as android.net.ConnectivityManager
+                    val active = cm.activeNetworkInfo
+                    val type = when (active?.type) {
+                        android.net.ConnectivityManager.TYPE_WIFI -> "wifi"
+                        android.net.ConnectivityManager.TYPE_MOBILE -> "mobile"
+                        android.net.ConnectivityManager.TYPE_ETHERNET -> "ethernet"
+                        else -> "none"
+                    }
+                    val connected = active?.isConnected ?: false
+                    "{\"success\":true,\"network_type\":\"$type\",\"connected\":$connected}"
                 }
                 else -> "{\"error\":\"not implemented: $toolName\"}"
             }

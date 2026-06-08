@@ -10,75 +10,64 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
+import com.codex.android.core.designsystem.*
 
-private val CodexDarkColorScheme = darkColorScheme(
-    primary = CodexPrimary,
-    onPrimary = Color.White,
-    primaryContainer = CodexPrimary.copy(alpha = 0.15f),
-    onPrimaryContainer = CodexPrimaryLight,
-    secondary = CodexSecondary,
-    onSecondary = Color.Black,
-    secondaryContainer = CodexSecondary.copy(alpha = 0.15f),
-    onSecondaryContainer = CodexSecondary,
-    tertiary = ReplitBlue,
-    onTertiary = Color.Black,
-    background = CodexBackground,
-    onBackground = CodexOnSurface,
-    surface = CodexSurface,
-    onSurface = CodexOnSurface,
-    surfaceVariant = CodexSurfaceVariant,
-    onSurfaceVariant = CodexOnSurfaceVariant,
-    outline = CodexOutline,
-    error = CodexError,
-    onError = Color.White,
-    errorContainer = CodexError.copy(alpha = 0.15f),
-    onErrorContainer = CodexError,
-    inverseSurface = CodexOnSurface,
-    inverseOnSurface = CodexSurface,
-    surfaceTint = CodexPrimary,
-)
+/**
+ * Codex Android v2.0 Theme — dark-only professional IDE aesthetic.
+ * All color tokens reference core/designsystem/Color.kt.
+ */
 
-private val CodexLightColorScheme = lightColorScheme(
-    primary = CodexPrimary,
-    onPrimary = Color.White,
-    primaryContainer = CodexPrimaryLight.copy(alpha = 0.3f),
-    onPrimaryContainer = CodexPrimaryDark,
-    secondary = CodexSecondary,
-    onSecondary = Color.White,
-    background = Color(0xFFF8F8FC),
-    onBackground = Color(0xFF1A1A2E),
-    surface = Color.White,
-    onSurface = Color(0xFF1A1A2E),
-    surfaceVariant = Color(0xFFF0F0F5),
-    onSurfaceVariant = Color(0xFF5A5A72),
-    outline = Color(0xFFD0D0DC),
-    error = CodexError,
-    onError = Color.White,
+private val CodexColorScheme = darkColorScheme(
+    primary = CxPrimary,
+    onPrimary = CxBackground,
+    primaryContainer = CxPrimary.copy(alpha = 0.15f),
+    onPrimaryContainer = CxPrimary,
+    secondary = CxBlue,
+    onSecondary = CxWhite,
+    secondaryContainer = CxBlue.copy(alpha = 0.15f),
+    onSecondaryContainer = CxBlue,
+    tertiary = CxWarning,
+    onTertiary = CxBackground,
+    background = CxBackground,
+    onBackground = CxTextPrimary,
+    surface = CxSurface,
+    onSurface = CxTextPrimary,
+    surfaceVariant = CxSurfaceVariant,
+    onSurfaceVariant = CxTextSecondary,
+    outline = CxBorder,
+    outlineVariant = CxBorder.copy(alpha = 0.5f),
+    error = CxError,
+    onError = CxWhite,
+    errorContainer = CxError.copy(alpha = 0.15f),
+    onErrorContainer = CxError,
+    inverseSurface = CxTextPrimary,
+    inverseOnSurface = CxSurface,
+    surfaceTint = CxPrimary,
 )
 
 @Composable
 fun CodexTheme(
-    darkTheme: Boolean = isSystemInDarkTheme(),
+    darkTheme: Boolean = true,
     content: @Composable () -> Unit
 ) {
-    val colorScheme = if (darkTheme) CodexDarkColorScheme else CodexLightColorScheme
+    val colorScheme = CodexColorScheme
 
     val view = LocalView.current
     if (!view.isInEditMode) {
         SideEffect {
             val window = (view.context as Activity).window
-            window.statusBarColor = colorScheme.background.toArgb()
-            window.navigationBarColor = colorScheme.surface.toArgb()
+            window.statusBarColor = CxBackground.toArgb()
+            window.navigationBarColor = CxSurface.toArgb()
             WindowCompat.getInsetsController(window, view).apply {
-                isAppearanceLightStatusBars = !darkTheme
-                isAppearanceLightNavigationBars = !darkTheme
+                isAppearanceLightStatusBars = false
+                isAppearanceLightNavigationBars = false
             }
         }
     }
 
     MaterialTheme(
         colorScheme = colorScheme,
-        typography = Typography(),
+        typography = CxTypography,
         content = content
     )
 }

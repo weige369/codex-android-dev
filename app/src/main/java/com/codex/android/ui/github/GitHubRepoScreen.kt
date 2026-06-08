@@ -1,11 +1,9 @@
 package com.codex.android.ui.github
 
-import android.content.Context
-import android.widget.Toast
+import android.util.Log
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
@@ -15,15 +13,14 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.codex.android.codex.github.GitHubApiClient
+import com.codex.android.core.designsystem.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -111,7 +108,9 @@ fun GitHubRepoScreen(
                     pb.redirectErrorStream(true)
                     val proc = pb.start()
                     currentBranch = proc.inputStream.bufferedReader().readText().trim()
-                } catch (_: Exception) {}
+                } catch (e: Exception) {
+                    Log.w("GitHubRepoScreen", "Failed to get current branch", e)
+                }
             }
         }
     }
@@ -148,7 +147,7 @@ fun GitHubRepoScreen(
                             Text(
                                 "分支: $currentBranch",
                                 fontSize = 11.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                color = CxTextSecondary
                             )
                         }
                     }
@@ -205,7 +204,7 @@ fun GitHubRepoScreen(
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface
+                    containerColor = CxSurface
                 )
             )
         }
@@ -337,16 +336,16 @@ fun GitHubRepoScreen(
             // Operation result message
             opResult?.let { result ->
                 Surface(
-                    modifier = Modifier.fillMaxWidth().padding(8.dp),
-                    shape = RoundedCornerShape(8.dp),
-                    color = Color(0xFF0A0A0F)
+                    modifier = Modifier.fillMaxWidth().padding(CxSpaceSm),
+                    shape = CxShapeDefault,
+                    color = CxSurfaceDark
                 ) {
                     Text(
                         result,
                         fontSize = 11.sp,
                         fontFamily = FontFamily.Monospace,
-                        color = Color(0xFF4AF626),
-                        modifier = Modifier.padding(8.dp)
+                        color = CxOnline,
+                        modifier = Modifier.padding(CxSpaceSm)
                     )
                 }
             }
@@ -362,18 +361,18 @@ private fun StatusTab(
     onOpenPRs: () -> Unit,
     onOpenIssues: () -> Unit
 ) {
-    Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
+    Column(modifier = Modifier.fillMaxSize().padding(CxSpaceLg)) {
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            Text("工作区状态", fontWeight = FontWeight.Bold, fontSize = 15.sp)
+            Text("工作区状态", fontWeight = FontWeight.Bold, fontSize = 15.sp, color = CxTextPrimary)
             IconButton(onClick = onRefresh) {
-                Icon(Icons.Default.Refresh, "刷新")
+                Icon(Icons.Default.Refresh, "刷新", tint = CxTextSecondary)
             }
         }
 
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(CxSpaceSm)) {
             OutlinedButton(onClick = onOpenPRs) {
                 Icon(Icons.Default.AccountTree, null, modifier = Modifier.size(16.dp))
                 Spacer(Modifier.width(4.dp))
@@ -386,7 +385,7 @@ private fun StatusTab(
             }
         }
 
-        Spacer(Modifier.height(12.dp))
+        Spacer(Modifier.height(CxSpaceMd))
 
         if (statusLoading) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -395,15 +394,15 @@ private fun StatusTab(
         } else {
             Surface(
                 modifier = Modifier.fillMaxWidth().weight(1f),
-                shape = RoundedCornerShape(8.dp),
-                color = Color(0xFF0A0A0F)
+                shape = CxShapeDefault,
+                color = CxSurfaceDark
             ) {
                 Text(
                     gitStatus.ifEmpty { "工作区无变更" },
                     fontSize = 11.sp,
                     fontFamily = FontFamily.Monospace,
-                    color = Color(0xFF4AF626),
-                    modifier = Modifier.fillMaxSize().padding(12.dp)
+                    color = CxOnline,
+                    modifier = Modifier.fillMaxSize().padding(CxSpaceMd)
                 )
             }
         }
@@ -416,17 +415,17 @@ private fun DiffTab(
     diffLoading: Boolean,
     onRefresh: () -> Unit
 ) {
-    Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
+    Column(modifier = Modifier.fillMaxSize().padding(CxSpaceLg)) {
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            Text("文件变更", fontWeight = FontWeight.Bold, fontSize = 15.sp)
+            Text("文件变更", fontWeight = FontWeight.Bold, fontSize = 15.sp, color = CxTextPrimary)
             IconButton(onClick = onRefresh) {
-                Icon(Icons.Default.Refresh, "刷新")
+                Icon(Icons.Default.Refresh, "刷新", tint = CxTextSecondary)
             }
         }
-        Spacer(Modifier.height(8.dp))
+        Spacer(Modifier.height(CxSpaceSm))
         if (diffLoading) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 CircularProgressIndicator()
@@ -434,16 +433,16 @@ private fun DiffTab(
         } else {
             Surface(
                 modifier = Modifier.fillMaxSize(),
-                shape = RoundedCornerShape(8.dp),
-                color = Color(0xFF0A0A0F)
+                shape = CxShapeDefault,
+                color = CxSurfaceDark
             ) {
-                LazyColumn(modifier = Modifier.padding(12.dp)) {
+                LazyColumn(modifier = Modifier.padding(CxSpaceMd)) {
                     item {
                         Text(
                             gitDiff,
                             fontSize = 10.sp,
                             fontFamily = FontFamily.Monospace,
-                            color = Color(0xFF4AF626)
+                            color = CxOnline
                         )
                     }
                 }
@@ -460,9 +459,9 @@ private fun CommitTab(
     commitResult: String?,
     onCommit: () -> Unit
 ) {
-    Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
-        Text("提交变更", fontWeight = FontWeight.Bold, fontSize = 15.sp)
-        Spacer(Modifier.height(12.dp))
+    Column(modifier = Modifier.fillMaxSize().padding(CxSpaceLg)) {
+        Text("提交变更", fontWeight = FontWeight.Bold, fontSize = 15.sp, color = CxTextPrimary)
+        Spacer(Modifier.height(CxSpaceMd))
 
         OutlinedTextField(
             value = commitMessage,
@@ -475,7 +474,7 @@ private fun CommitTab(
             keyboardActions = KeyboardActions(onDone = { onCommit() })
         )
 
-        Spacer(Modifier.height(12.dp))
+        Spacer(Modifier.height(CxSpaceMd))
 
         Button(
             onClick = onCommit,
@@ -484,25 +483,25 @@ private fun CommitTab(
         ) {
             if (isCommitting) {
                 CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
-                Spacer(Modifier.width(8.dp))
+                Spacer(Modifier.width(CxSpaceSm))
             }
             Icon(Icons.Default.Upload, null, modifier = Modifier.size(18.dp))
-            Spacer(Modifier.width(8.dp))
+            Spacer(Modifier.width(CxSpaceSm))
             Text(isCommitting.let { if (it) "提交中..." else "提交" })
         }
 
         commitResult?.let {
-            Spacer(Modifier.height(12.dp))
+            Spacer(Modifier.height(CxSpaceMd))
             Surface(
-                shape = RoundedCornerShape(8.dp),
-                color = Color(0xFF0A0A0F)
+                shape = CxShapeDefault,
+                color = CxSurfaceDark
             ) {
                 Text(
                     it,
                     fontSize = 11.sp,
                     fontFamily = FontFamily.Monospace,
-                    color = Color(0xFF4AF626),
-                    modifier = Modifier.fillMaxWidth().padding(10.dp)
+                    color = CxOnline,
+                    modifier = Modifier.fillMaxWidth().padding(CxSpaceSm)
                 )
             }
         }
@@ -520,9 +519,9 @@ private fun BranchesTab(
     onCreateBranch: () -> Unit,
     onCheckoutBranch: (String) -> Unit
 ) {
-    Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
-        Text("分支管理", fontWeight = FontWeight.Bold, fontSize = 15.sp)
-        Spacer(Modifier.height(12.dp))
+    Column(modifier = Modifier.fillMaxSize().padding(CxSpaceLg)) {
+        Text("分支管理", fontWeight = FontWeight.Bold, fontSize = 15.sp, color = CxTextPrimary)
+        Spacer(Modifier.height(CxSpaceMd))
 
         // Create new branch
         Row(
@@ -537,7 +536,7 @@ private fun BranchesTab(
                 singleLine = true,
                 enabled = !isCreatingBranch
             )
-            Spacer(Modifier.width(8.dp))
+            Spacer(Modifier.width(CxSpaceSm))
             Button(
                 onClick = onCreateBranch,
                 enabled = !isCreatingBranch && newBranchName.isNotBlank()
@@ -550,10 +549,10 @@ private fun BranchesTab(
             }
         }
 
-        Spacer(Modifier.height(16.dp))
+        Spacer(Modifier.height(CxSpaceLg))
 
-        Text("已有分支", fontWeight = FontWeight.Medium, fontSize = 13.sp)
-        Spacer(Modifier.height(8.dp))
+        Text("已有分支", fontWeight = FontWeight.Medium, fontSize = 13.sp, color = CxTextSecondary)
+        Spacer(Modifier.height(CxSpaceSm))
 
         if (branchLoading) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -566,30 +565,30 @@ private fun BranchesTab(
                         onClick = {
                             if (branch.name != currentBranch) onCheckoutBranch(branch.name)
                         },
-                        shape = RoundedCornerShape(8.dp),
+                        shape = CxShapeDefault,
                         color = if (branch.name == currentBranch)
-                            MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
-                        else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                            CxPrimary.copy(alpha = 0.15f)
+                        else CxSurface,
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Row(
-                            modifier = Modifier.padding(12.dp),
+                            modifier = Modifier.padding(CxSpaceMd),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Icon(
                                 if (branch.name == currentBranch) Icons.Default.CheckCircle else Icons.Default.AccountTree,
                                 null,
                                 modifier = Modifier.size(18.dp),
-                                tint = if (branch.name == currentBranch) Color(0xFF2ED573)
-                                else MaterialTheme.colorScheme.onSurfaceVariant
+                                tint = if (branch.name == currentBranch) CxOnline
+                                else CxTextTertiary
                             )
-                            Spacer(Modifier.width(8.dp))
+                            Spacer(Modifier.width(CxSpaceSm))
                             Column(modifier = Modifier.weight(1f)) {
-                                Text(branch.name, fontWeight = FontWeight.Medium, fontSize = 14.sp)
-                                Text(branch.sha.take(7), fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text(branch.name, fontWeight = FontWeight.Medium, fontSize = 14.sp, color = CxTextPrimary)
+                                Text(branch.sha.take(7), fontSize = 11.sp, color = CxTextSecondary)
                             }
                             if (branch.name == currentBranch) {
-                                Text("当前", fontSize = 11.sp, color = Color(0xFF2ED573))
+                                Text("当前", fontSize = 11.sp, color = CxOnline)
                             }
                         }
                     }

@@ -1,11 +1,11 @@
 package com.codex.android.ui.github
 
-import android.content.Context
+
 import android.widget.Toast
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
+
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
@@ -13,12 +13,13 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
+
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.codex.android.codex.github.GitHubApiClient
+import com.codex.android.core.designsystem.*
 import kotlinx.coroutines.launch
 
 /**
@@ -81,7 +82,7 @@ fun GitHubImportScreen(
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface
+                    containerColor = CxSurface
                 )
             )
         }
@@ -235,14 +236,14 @@ private fun UrlImportTab(
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant
+                    containerColor = CxSurface
                 )
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
-                    Text("支持以下格式:", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Text("• https://github.com/owner/repo", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Text("• git@github.com:owner/repo.git", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Text("• owner/repo", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("支持以下格式:", fontSize = 12.sp, color = CxTextSecondary)
+                    Text("• https://github.com/owner/repo", fontSize = 12.sp, color = CxTextSecondary)
+                    Text("• git@github.com:owner/repo.git", fontSize = 12.sp, color = CxTextSecondary)
+                    Text("• owner/repo", fontSize = 12.sp, color = CxTextSecondary)
                     Spacer(Modifier.height(12.dp))
                     OutlinedTextField(
                         value = repoUrl,
@@ -279,16 +280,16 @@ private fun UrlImportTab(
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     colors = CardDefaults.cardColors(
-                        containerColor = Color(0xFF1A1A2E)
+                        containerColor = CxSurfaceDark
                     )
                 ) {
                     Column(modifier = Modifier.padding(12.dp)) {
-                        Text("导入日志", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFF4AF626))
+                        Text("导入日志", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = CxOnline)
                         Spacer(Modifier.height(4.dp))
                         Text(
                             importLog.trimStart(),
                             fontSize = 11.sp,
-                            color = Color(0xFF4AF626),
+                            color = CxOnline,
                             fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
                             lineHeight = 18.sp
                         )
@@ -303,8 +304,8 @@ private fun UrlImportTab(
                     modifier = Modifier.fillMaxWidth(),
                     colors = CardDefaults.cardColors(
                         containerColor = if (result.contains("✅"))
-                            Color(0xFF1B5E20).copy(alpha = 0.2f)
-                        else Color(0xFFB71C1C).copy(alpha = 0.2f)
+                            CxOnline.copy(alpha = 0.2f)
+                        else CxError.copy(alpha = 0.2f)
                     )
                 ) {
                     Column(modifier = Modifier.padding(16.dp)) {
@@ -357,7 +358,7 @@ private fun UserReposTab(
             item {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+                    colors = CardDefaults.cardColors(containerColor = CxSurface)
                 ) {
                     Row(
                         modifier = Modifier.padding(12.dp).fillMaxWidth(),
@@ -365,11 +366,11 @@ private fun UserReposTab(
                     ) {
                         Surface(
                             shape = RoundedCornerShape(20.dp),
-                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f),
+                            color = CxPrimary.copy(alpha = 0.1f),
                             modifier = Modifier.size(40.dp)
                         ) {
                             Box(contentAlignment = Alignment.Center) {
-                                Icon(Icons.Default.Person, null, tint = MaterialTheme.colorScheme.primary)
+                                Icon(Icons.Default.Person, null, tint = CxPrimary)
                             }
                         }
                         Spacer(Modifier.width(12.dp))
@@ -378,13 +379,13 @@ private fun UserReposTab(
                             Text(
                                 "${user.publicRepos} 个公开仓库 · ${user.followers} 个关注者",
                                 fontSize = 12.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                color = CxTextSecondary
                             )
                         }
                         Text(
                             "${repos.size} 仓库",
                             fontSize = 12.sp,
-                            color = MaterialTheme.colorScheme.primary
+                            color = CxPrimary
                         )
                     }
                 }
@@ -441,7 +442,7 @@ private fun SearchTab(
             }
         } else if (results.isEmpty()) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text("输入关键词搜索仓库", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("输入关键词搜索仓库", color = CxTextSecondary)
             }
         } else {
             LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -462,7 +463,7 @@ private fun RepoCard(
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+            containerColor = CxSurface.copy(alpha = 0.5f)
         )
     ) {
         Row(
@@ -475,7 +476,7 @@ private fun RepoCard(
                         if (repo.isPrivate) Icons.Default.Lock else Icons.Default.Public,
                         null,
                         modifier = Modifier.size(14.dp),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        tint = CxTextSecondary
                     )
                     Spacer(Modifier.width(6.dp))
                     Text(repo.fullName, fontWeight = FontWeight.Medium, fontSize = 14.sp)
@@ -484,7 +485,7 @@ private fun RepoCard(
                     Text(
                         repo.description,
                         fontSize = 12.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        color = CxTextSecondary,
                         maxLines = 2,
                         modifier = Modifier.padding(top = 4.dp)
                     )
@@ -518,13 +519,13 @@ private fun RepoCard(
 private fun LabelChip(text: String) {
     Surface(
         shape = RoundedCornerShape(4.dp),
-        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)
+        color = CxPrimary.copy(alpha = 0.1f)
     ) {
         Text(
             text,
             modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
             fontSize = 11.sp,
-            color = MaterialTheme.colorScheme.primary
+            color = CxPrimary
         )
     }
 }

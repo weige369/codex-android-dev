@@ -671,7 +671,7 @@ class GitHubApiClient(private val context: Context) {
     private suspend fun <T> apiWithBody(method: String, endpoint: String, body: JSONObject, parser: (JSONObject) -> T): Result<T> {
         return try {
             val tokenResult = getToken()
-            if (tokenResult.isFailure) return Result.failure(tokenResult.exceptionOrNull()!!)
+            if (tokenResult.isFailure) return Result.failure(tokenResult.exceptionOrNull() ?: Exception("Token fetch failed"))
 
             val url = URL("$API_BASE$endpoint")
             val conn = url.openConnection() as HttpURLConnection
@@ -706,7 +706,7 @@ class GitHubApiClient(private val context: Context) {
     private suspend fun <T> apiGetObject(endpoint: String, parser: (JSONObject) -> T): Result<T> {
         return try {
             val tokenResult = getToken()
-            if (tokenResult.isFailure) return Result.failure(tokenResult.exceptionOrNull()!!)
+            if (tokenResult.isFailure) return Result.failure(tokenResult.exceptionOrNull() ?: Exception("Token fetch failed"))
 
             val url = URL("$API_BASE$endpoint")
             val conn = url.openConnection() as HttpURLConnection
@@ -735,7 +735,7 @@ class GitHubApiClient(private val context: Context) {
     private suspend fun <T> apiGetArray(endpoint: String, parser: (JSONArray) -> T): Result<T> {
         return try {
             val tokenResult = getToken()
-            if (tokenResult.isFailure) return Result.failure(tokenResult.exceptionOrNull()!!)
+            if (tokenResult.isFailure) return Result.failure(tokenResult.exceptionOrNull() ?: Exception("Token fetch failed"))
 
             val url = URL("$API_BASE$endpoint")
             val conn = url.openConnection() as HttpURLConnection
@@ -835,4 +835,68 @@ class GitHubApiClient(private val context: Context) {
     private fun readStream(stream: java.io.InputStream): String {
         return BufferedReader(InputStreamReader(stream)).readText()
     }
+
+    // ========== v2.0 扩展：PR Diff + Notifications ==========
+
+    /**
+     * 获取 PR 的 diff 内容（使用 application/vnd.github.v3.diff Accept 头）。
+     */
+    suspend fun getPullRequestDiff(owner: String, repo: String, number: Int): Result<String> =
+        withContext(Dispatchers.IO) {
+            try {
+                val tokenResult = getToken()
+                if (tokenResult.isFailure) return@withContext Result.failure(tokenResult.exceptionOrNull() ?: Exception("Token fetch failed"))
+
+                val url = URL("$API_BASE/repos/$owner/$repo/pulls/$number")
+                val conn = url.openConnection() as HttpURLConnection
+                conn.requestMethod = "GET"
+                conn.setRequestProperty("Authorization", "Bearer ${tokenResult.getOrThrow()}")
+                conn.setRequestProperty("Accept", "application/vnd.github.v3.diff")
+                conn.connectTimeout = 15000
+                conn.readTimeout = 30000
+
+                if (conn.responseCode == 200) {
+                    val diff = readStream(conn.inputStream)
+                    Result.success(diff)
+                } else {
+                    val error = readStream(conn.errorStream)
+                    Result.failure(Exception("GitHub API 错误 (${conn.responseCode}): $error"))
+                }
+            } catch (e: Exception) {
+                Result.failure(e)
+            }
+        }
+
+    data class Notification(
+        val id: String,
+        val reason: String,
+        val title: String,
+        val subjectUrl: String,
+        val repoFullName: String,
+        val updatedAt: String,
+        val isUnread: Boolean
+    )
+
+    /**
+     * 获取用户 GitHub 通知列表。
+     */
+    suspend fun listNotifications(all: Boolean = false, perPage: Int = 20): Result<List<Notification>> =
+        withContext(Dispatchers.IO) {
+            apiGetArray("/notifications?all=$all&per_page=$perPage") { arr ->
+                (0 until arr.length()).map { i ->
+                    val item = arr.getJSONObject(i)
+                    val subject = item.getJSONObject("subject")
+                    val repo = item.getJSONObject("repository")
+                    Notification(
+                        id = item.getString("id"),
+                        reason = item.getString("reason"),
+                        title = subject.getString("title"),
+                        subjectUrl = subject.getString("url"),
+                        repoFullName = repo.getString("full_name"),
+                        updatedAt = item.getString("updated_at"),
+                        isUnread = item.optBoolean("unread", true)
+                    )
+                }
+            }
+        }
 }

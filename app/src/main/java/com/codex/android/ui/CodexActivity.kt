@@ -49,6 +49,7 @@ import com.codex.android.ui.theme.CodexPrimary
 import com.codex.android.ui.workspace.WorkspaceScreen
 import com.codex.android.ui.workspace.forwardStatusToWebView
 import com.codex.android.ui.setup.SetupWizardScreen
+import com.codex.android.ui.chat.AIChatScreen
 import com.codex.android.data.preferences.SetupPreferences
 import com.codex.android.ui.github.GitHubRepoScreen
 import com.codex.android.ui.github.GitHubPRScreen
@@ -96,6 +97,7 @@ class CodexActivity : ComponentActivity() {
         data object Diagnostic : Screen()
         data object About : Screen()
         data object SetupWizard : Screen()
+        data object AIChat : Screen()
         data class GitHubRepo(val repoFullName: String, val localPath: String) : Screen()
         data object GitHubPRList : Screen()
         data object GitHubIssueList : Screen()
@@ -323,6 +325,7 @@ class CodexActivity : ComponentActivity() {
                                     onOpenDiagnostic = { navigateTo(Screen.Diagnostic) },
                                     onOpenFileBrowser = { navigateTo(Screen.FileBrowser) },
                                     onOpenAbout = { navigateTo(Screen.About) },
+                                    onOpenAIChat = { navigateTo(Screen.AIChat) },
                                     onToggleRuntime = {
                                         if (isRunning) {
                                             CodexRuntimeService.stop(this@CodexActivity)
@@ -382,6 +385,9 @@ class CodexActivity : ComponentActivity() {
                                             navigateTo(Screen.Workspace)
                                         }
                                     }
+                                )
+                                Screen.AIChat -> AIChatScreen(
+                                    onBack = { navigateTo(Screen.Workspace) }
                                 )
                                 is Screen.GitHubRepo -> {
                                     val screen = currentScreen as Screen.GitHubRepo
@@ -648,9 +654,14 @@ class CodexActivity : ComponentActivity() {
     }
 
     override fun onDestroy() {
-        super.onDestroy()
-        try { unregisterReceiver(statusReceiver) } catch (_: Exception) {}
+        // 销毁 WebView 释放资源
+        _webView?.destroy()
+        _webView = null
+        try { unregisterReceiver(statusReceiver) } catch (e: Exception) {
+            Log.w(TAG, "StatusReceiver already unregistered", e)
+        }
         codexBridge.destroy()
+        super.onDestroy()
     }
 }
 
