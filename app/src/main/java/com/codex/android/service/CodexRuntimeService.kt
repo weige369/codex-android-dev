@@ -201,14 +201,19 @@ class CodexRuntimeService : Service() {
             codexManager.workspaceDir.mkdirs()
             _wsPort = findFreePort(DEFAULT_WS_PORT)
             addLog("WebSocket 端口: $_wsPort")
+            addLog("即将分配的 HTTP 端口: ${_wsPort + 1}")
 
-            // 启动 Codex
+            // 启动 Codex — 根据运行模式选择正确路径
             _state.value = RuntimeState.STARTING
             addLog("正在启动 Codex exec-server...")
             updateNotification("正在启动 Codex...")
 
             when (_runningMode) {
-                "proot-linux" -> { } // already handled above
+                "proot-linux" -> {
+                    // 下载完成后也需要通过 proot 启动（不能走 direct 路径）
+                    addLog("proot-linux 模式：通过 proot 启动...")
+                    startCodexInProot(linuxInfo)
+                }
                 else -> startDirect()
             }
 
