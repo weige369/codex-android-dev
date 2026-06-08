@@ -38,7 +38,7 @@ import com.codex.android.ui.about.AboutScreen
 import com.codex.android.ui.diagnostics.DiagnosticsScreen
 import com.codex.android.ui.environment.DevEnvironmentScreen
 import com.codex.android.ui.files.FileBrowserScreen
-import com.codex.android.ui.github.GitHubImportScreen
+import com.codex.android.ui.github.GitHubRepoScreen
 import com.codex.android.ui.mcp.CodexMCPScreen
 import com.codex.android.ui.settings.CodexSettingsScreen
 import com.codex.android.ui.skills.CodexSkillsScreen
@@ -49,7 +49,6 @@ import com.codex.android.ui.theme.CodexPrimary
 import com.codex.android.ui.workspace.WorkspaceScreen
 import com.codex.android.ui.workspace.forwardStatusToWebView
 import com.codex.android.ui.setup.SetupWizardScreen
-import com.codex.android.ui.chat.AIChatScreen
 import com.codex.android.data.preferences.SetupPreferences
 import com.codex.android.ui.github.GitHubRepoScreen
 import com.codex.android.ui.github.GitHubPRScreen
@@ -91,13 +90,13 @@ class CodexActivity : ComponentActivity() {
         data object Settings : Screen()
         data object Skills : Screen()
         data object MCP : Screen()
-        data object GitHubImport : Screen()
+        // data object GitHubImport : Screen() // TODO: re-enable when GitHubImportScreen is ready
         data object FileBrowser : Screen()
         data object DevEnvironment : Screen()
         data object Diagnostic : Screen()
         data object About : Screen()
         data object SetupWizard : Screen()
-        data object AIChat : Screen()
+        // data object AIChat : Screen() // TODO: re-enable when AIChatScreen is ready
         data class GitHubRepo(val repoFullName: String, val localPath: String) : Screen()
         data object GitHubPRList : Screen()
         data object GitHubIssueList : Screen()
@@ -320,12 +319,12 @@ class CodexActivity : ComponentActivity() {
                                     onOpenSettings = { navigateTo(Screen.Settings) },
                                     onOpenSkills = { navigateTo(Screen.Skills) },
                                     onOpenMCP = { navigateTo(Screen.MCP) },
-                                    onOpenGitHub = { navigateTo(Screen.GitHubImport) },
+                                    onOpenGitHub = { navigateTo(Screen.Workspace) },
                                     onOpenDevEnv = { navigateTo(Screen.DevEnvironment) },
                                     onOpenDiagnostic = { navigateTo(Screen.Diagnostic) },
                                     onOpenFileBrowser = { navigateTo(Screen.FileBrowser) },
                                     onOpenAbout = { navigateTo(Screen.About) },
-                                    onOpenAIChat = { navigateTo(Screen.AIChat) },
+                                    onOpenAIChat = { navigateTo(Screen.Workspace) },
                                     onToggleRuntime = {
                                         if (isRunning) {
                                             CodexRuntimeService.stop(this@CodexActivity)
@@ -348,7 +347,7 @@ class CodexActivity : ComponentActivity() {
                                     onBack = { navigateTo(Screen.Workspace) },
                                     onOpenSkills = { navigateTo(Screen.Skills) },
                                     onOpenMCP = { navigateTo(Screen.MCP) },
-                                    onOpenGitHub = { navigateTo(Screen.GitHubImport) },
+                                    onOpenGitHub = { navigateTo(Screen.Workspace) },
                                     onOpenDiagnostic = { navigateTo(Screen.Diagnostic) },
                                     onOpenAbout = { navigateTo(Screen.About) }
                                 )
@@ -358,14 +357,14 @@ class CodexActivity : ComponentActivity() {
                                 Screen.MCP -> CodexMCPScreen(
                                     onBack = { navigateTo(Screen.Settings) }
                                 )
-                                Screen.GitHubImport -> GitHubImportScreen(
-                                    workspaceDir = codexManager.workspaceDir.absolutePath,
-                                    onBack = { navigateTo(Screen.Workspace) },
-                                    onManageRepo = { fullName, localPath ->
-                                        _currentGitHubRepo.value = Pair(fullName, localPath)
-                                        navigateTo(Screen.GitHubRepo(fullName, localPath))
-                                    }
-                                )
+                                //                                 Screen.GitHubImport -> GitHubImportScreen(
+                                //                                     workspaceDir = codexManager.workspaceDir.absolutePath,
+                                //                                     onBack = { navigateTo(Screen.Workspace) },
+                                //                                     onManageRepo = { fullName, localPath ->
+                                //                                         _currentGitHubRepo.value = Pair(fullName, localPath)
+                                //                                         navigateTo(Screen.GitHubRepo(fullName, localPath))
+                                //                                     }
+                                //                                 )
                                 Screen.Diagnostic -> DiagnosticsScreen(
                                     onBack = { navigateTo(Screen.Settings) }
                                 )
@@ -386,15 +385,15 @@ class CodexActivity : ComponentActivity() {
                                         }
                                     }
                                 )
-                                Screen.AIChat -> AIChatScreen(
-                                    onBack = { navigateTo(Screen.Workspace) }
-                                )
+                                //                                 Screen.AIChat -> AIChatScreen(
+                                //                                     onBack = { navigateTo(Screen.Workspace) }
+                                //                                 )
                                 is Screen.GitHubRepo -> {
                                     val screen = currentScreen as Screen.GitHubRepo
                                     GitHubRepoScreen(
                                         repoFullName = screen.repoFullName,
                                         repoLocalPath = screen.localPath,
-                                        onBack = { navigateTo(Screen.GitHubImport) },
+                                        onBack = { navigateTo(Screen.Workspace) },
                                         onOpenPRs = {
                                             _currentGitHubRepoForPRs.value = Pair(screen.repoFullName, screen.localPath)
                                             navigateTo(Screen.GitHubPRList)
@@ -413,13 +412,13 @@ class CodexActivity : ComponentActivity() {
                                             onBack = {
                                                 _currentGitHubRepo.value?.let { (name, path) ->
                                                     navigateTo(Screen.GitHubRepo(name, path))
-                                                } ?: navigateTo(Screen.GitHubImport)
+                                                } ?: navigateTo(Screen.Workspace)
                                             }
                                         )
                                     } else {
                                         GitHubPRScreen(
                                             repoFullName = "",
-                                            onBack = { navigateTo(Screen.GitHubImport) }
+                                            onBack = { navigateTo(Screen.Workspace) }
                                         )
                                     }
                                 }
@@ -431,13 +430,13 @@ class CodexActivity : ComponentActivity() {
                                             onBack = {
                                                 _currentGitHubRepo.value?.let { (name, path) ->
                                                     navigateTo(Screen.GitHubRepo(name, path))
-                                                } ?: navigateTo(Screen.GitHubImport)
+                                                } ?: navigateTo(Screen.Workspace)
                                             }
                                         )
                                     } else {
                                         GitHubIssueScreen(
                                             repoFullName = "",
-                                            onBack = { navigateTo(Screen.GitHubImport) }
+                                            onBack = { navigateTo(Screen.Workspace) }
                                         )
                                     }
                                 }
@@ -479,7 +478,7 @@ class CodexActivity : ComponentActivity() {
                                     desc = "从 GitHub 导入仓库",
                                     onClick = {
                                         showMoreMenu = false
-                                        navigateTo(Screen.GitHubImport)
+                                        navigateTo(Screen.Workspace)
                                     }
                                 )
                                 MoreMenuItem(
@@ -490,7 +489,7 @@ class CodexActivity : ComponentActivity() {
                                         showMoreMenu = false
                                         _currentGitHubRepo.value?.let { (name, path) ->
                                             navigateTo(Screen.GitHubRepo(name, path))
-                                        } ?: navigateTo(Screen.GitHubImport)
+                                        } ?: navigateTo(Screen.Workspace)
                                     }
                                 )
                                 MoreMenuItem(
