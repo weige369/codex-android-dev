@@ -356,50 +356,108 @@ class CodexRuntimeService : Service() {
             
             // 将 Codex 二进制复制到 rootfs 中
             addLog("安装 Codex 到 proot rootfs...")
-            val rootfsBin = File(linuxInfo.rootfsPath, "/usr/local/bin")
-            rootfsBin.mkdirs()
+            addLog("rootfs 路径: ${linuxInfo.rootfsPath}")
+            addLog("proot 路径: ${linuxInfo.prootPath}")
+            addLog("proot loader: ${linuxInfo.prootLoaderPath}")
+            val rootfsBin = File(linuxInfo.rootfsPath, "usr/local/bin")
+            if (!rootfsBin.exists()) {
+                rootfsBin.mkdirs()
+                addLog("创建 /usr/local/bin 目录: ${rootfsBin.absolutePath}")
+            }
             codexManager.codexBinary.inputStream().use { input ->
                 File(rootfsBin, "codex").outputStream().use { output ->
                     input.copyTo(output)
                 }
             }
-            File(rootfsBin, "codex").setExecutable(true)
+            val codexInRootfs = File(rootfsBin, "codex")
+            val setExecOk = codexInRootfs.setExecutable(true)
+            addLog("Codex 二进制已安装到 rootfs: ${codexInRootfs.absolutePath} (${codexInRootfs.length()} bytes, executable=$setExecOk)")
 
-            // 构建启动命令
-            addLog("通过 proot 启动 Codex...")
-            val launchCmd = "codex --unix-daemon --http-port $_wsPort --ws-port $_wsPort"
+            // 先做 proot 环境诊断
+            addLog("--- proot 环境诊断 ---")
+            try {
+                val probeCmd = linuxEnv.buildProotCommand("/bin/bash -c 'uname -a; which bash; which codex 2>&1; file /usr/local/bin/codex 2>&1; ls -la /usr/local/bin/codex 2>&1'")
+                val probeEnv = linuxEnv.getProotEnv()
+                val probeProcess = ProcessBuilder(probeCmd)
+                    .apply {
+                        environment().putAll(probeEnv)
+                        redirectErrorStream(true)
+                    }
+                    .start()
+                val probeOut = probeProcess.inputStream.bufferedReader().readText()
+                probeProcess.waitFor(15, java.util.concurrent.TimeUnit.SECONDS)
+                addLog("proot 诊断:\n$probeOut")
+            } catch (e: Exception) {
+                addLog("proot 诊断执行失败: ${e.message}")
+            }
+            addLog("--- 诊断结束 ---")
+
+            // 构建启动命令 — 尝试 exec-server（Codex 0.133.0 标准子命令）
+            addLog("通过 proot 启动 Codex exec-server...")
+            // 依次尝试多种命令格式
+            val launchCmd = "exec /usr/local/bin/codex exec-server --port $_wsPort --http-port ${_wsPort + 1} 2>&1"
+            addLog("启动命令: $launchCmd")
             val cmd = linuxEnv.buildProotCommand(launchCmd)
+            addLog("完整 proot 命令: ${cmd.joinToString(" ")}")
             val prootEnv = linuxEnv.getProotEnv()
+            // 清理可能冲突的 LD_LIBRARY_PATH（proot 内 Ubuntu 用 glibc，不需要 Android libs）
+            val cleanEnv = prootEnv.toMutableMap().apply {
+                remove("LD_LIBRARY_PATH")
+            }
+            addLog("环境变量 (${cleanEnv.size}): ${cleanEnv.keys.take(5).joinToString()}")
 
             codexProcess = ProcessBuilder(cmd)
                 .apply {
-                    environment().putAll(prootEnv)
+                    environment().putAll(cleanEnv)
                     redirectErrorStream(false)
                 }
                 .start()
             isRunning = true
+            addLog("proot 进程已启动，PID 暂不可知")
 
-            // 监控输出
+            // 同时监控 stdout 和 stderr
             serviceScope.launch {
                 try {
-                    codexProcess?.inputStream?.bufferedReader()?.use { reader ->
-                        reader.lines().forEach { line ->
-                            addLog("[Codex-proot] $line")
-                            if (line.contains("listening", ignoreCase = true) ||
-                                line.contains("started", ignoreCase = true) ||
-                                line.contains("ready", ignoreCase = true)) {
-                                _state.value = RuntimeState.RUNNING
-                                updateNotification("Codex 已就绪 (自包含 Linux)")
-                                broadcastStatus()
+                    val stdoutJob = launch {
+                        try {
+                            codexProcess?.inputStream?.bufferedReader()?.use { reader ->
+                                reader.lines().forEach { line ->
+                                    addLog("[Codex-proot] $line")
+                                    if (line.contains("listening", ignoreCase = true) ||
+                                        line.contains("started", ignoreCase = true) ||
+                                        line.contains("ready", ignoreCase = true)) {
+                                        _state.value = RuntimeState.RUNNING
+                                        updateNotification("Codex 已就绪 (自包含 Linux)")
+                                        broadcastStatus()
+                                    }
+                                }
                             }
+                        } catch (e: Exception) {
+                            addLog("Codex proot stdout 已关闭: ${e.message}")
                         }
                     }
+                    val stderrJob = launch {
+                        try {
+                            codexProcess?.errorStream?.bufferedReader()?.use { reader ->
+                                reader.lines().forEach { line ->
+                                    if (line.isNotBlank()) {
+                                        addLog("[Codex-proot-err] $line")
+                                    }
+                                }
+                            }
+                        } catch (e: Exception) {
+                            addLog("Codex proot stderr 已关闭: ${e.message}")
+                        }
+                    }
+                    // 等待两个流都结束（或进程退出）
+                    joinAll(stdoutJob, stderrJob)
                 } catch (e: Exception) {
-                    addLog("Codex proot 输出流已关闭: ${e.message}")
+                    addLog("Codex proot 输出监控异常: ${e.message}")
                 }
             }
         } catch (e: Exception) {
             addLog("自包含 Linux 启动失败: ${e.message}")
+            Log.e(TAG, "启动 Codex (proot) 失败", e)
             _state.value = RuntimeState.ERROR
             updateNotification("Codex 启动失败（自包含 Linux）")
         }
