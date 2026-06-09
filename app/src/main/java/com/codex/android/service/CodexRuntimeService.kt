@@ -16,23 +16,16 @@ import java.io.File
 import java.net.ServerSocket
 
 enum class RuntimeState {
-    STOPPED,
-    DOWNLOADING,
-    EXTRACTING,
-    INSTALLING,
-    STARTING,
-    RUNNING,
-    ERROR
+    STOPPED, DOWNLOADING, EXTRACTING, INSTALLING,
+    STARTING, RUNNING, ERROR
 }
 
 /**
- * 前台服务，管理 Codex exec-server 生命周期。
+ * Codex exec-server 运行时服务。
  *
- * 架构：通过 Termux 在后台启动 proot → codex exec-server，
- * App WebView 通过 WebSocket 连接 ws://127.0.0.1:PORT。
- *
- * 放弃在 App 内直接启动 proot——Android untrusted_app domain
- * 的进程无法可靠执行 ptrace（持续 exit=255）。
+ * 最终方案：将 proot 命令写入 shell 脚本文件，
+ * 通过 ProcessBuilder("sh", scriptPath) 执行。
+ * 这会绕过 ProcessBuilder 直接传参时的环境变量/引号问题。
  */
 class CodexRuntimeService : Service() {
 
@@ -43,10 +36,6 @@ class CodexRuntimeService : Service() {
 
         const val DEFAULT_WS_PORT = 9877
 
-        private const val TERMUX_PKG = "com.termux"
-        private const val TERMUX_SVC = "$TERMUX_PKG.app.RunCommandService"
-        private const val TERMUX_BASH = "/data/data/com.termux/files/usr/bin/bash"
-
         private val _state = MutableStateFlow(RuntimeState.STOPPED)
         val state: StateFlow<RuntimeState> = _state.asStateFlow()
 
@@ -55,9 +44,6 @@ class CodexRuntimeService : Service() {
 
         private var _wsPort = DEFAULT_WS_PORT
         val wsPort: Int get() = _wsPort
-
-        private var _mode: String = ""
-        val runningMode: String get() = _mode
 
         fun start(ctx: Context) {
             val i = Intent(ctx, CodexRuntimeService::class.java)
@@ -71,6 +57,7 @@ class CodexRuntimeService : Service() {
     }
 
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+    private var codexProcess: Process? = null
     private var isRunning = false
     private lateinit var codexManager: CodexManager
 
@@ -97,19 +84,13 @@ class CodexRuntimeService : Service() {
         super.onDestroy()
     }
 
-    // ─── 启动序列 ─────────────────────────────────────────────────
+    // ─── 启动序列 ─────────────────────────────────────────────
 
     private suspend fun start() {
         if (isRunning) return
         try {
-            // 1. 检查 termux
-            if (!hasTermux()) {
-                err("需要安装 Termux"); return
-            }
-            _mode = "termux-proot"
-
-            // 2. 确保二进制
             _state.value = RuntimeState.STARTING
+
             if (!codexManager.isInstalled()) {
                 if (!download()) return
             }
@@ -119,17 +100,15 @@ class CodexRuntimeService : Service() {
                 if (!download()) return
             }
 
-            // 3. 安装到 rootfs
             _state.value = RuntimeState.INSTALLING
             installToRootfs()
 
-            // 4. 通过 Termux 启动
             _state.value = RuntimeState.STARTING
             _wsPort = findFreePort(DEFAULT_WS_PORT)
-            if (!launchInTermux()) return
+
+            if (!launchProot()) return
             isRunning = true
 
-            // 延迟标记就绪（实际由 WS 连接确认）
             delay(3000)
             _state.value = RuntimeState.RUNNING
             updateNotify("Codex 已就绪")
@@ -141,7 +120,7 @@ class CodexRuntimeService : Service() {
         }
     }
 
-    // ─── 下载 ─────────────────────────────────────────────────────
+    // ─── 下载 ─────────────────────────────────────────────────
 
     private suspend fun download(): Boolean {
         _state.value = RuntimeState.DOWNLOADING
@@ -162,7 +141,7 @@ class CodexRuntimeService : Service() {
         return true
     }
 
-    // ─── 安装 ─────────────────────────────────────────────────────
+    // ─── 安装到 rootfs ───────────────────────────────────────
 
     private fun installToRootfs() {
         val rootfs = File(filesDir, "linux-rootfs")
@@ -175,74 +154,137 @@ class CodexRuntimeService : Service() {
         log("安装完毕: ${dest.length()} B")
     }
 
-    // ─── Termux 启动 ──────────────────────────────────────────────
+    // ─── 核心：本地 proot 启动 ────────────────────────────────
 
-    private fun hasTermux(): Boolean = try {
-        packageManager.getPackageInfo(TERMUX_PKG, 0); true
-    } catch (_: Exception) { false }
-
-    private fun launchInTermux(): Boolean {
-        val rootfs = File(filesDir, "linux-rootfs").absolutePath
-        val port = _wsPort
-        val dataDir = filesDir.absolutePath
-
-        // 先确保 Termux 有 proot
-        sendTermuxCmd("pkg install -y proot 2>/dev/null; which proot || echo NO_PROOT")
-
-        // 构造 proot 命令
-        val prootCmd = buildString {
-            append("proot")
-            append(" --rootfs='$rootfs'")
-            append(" --root-id --kill-on-exit")
-            append(" -b /dev -b /proc -b /sys")
-            append(" -b '$dataDir:$dataDir'")
-            append(" -b /storage")
-            append(" -w /root")
-            append(" /usr/bin/env -i")
-            append(" HOME=/root")
-            append(" PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin")
-            append(" TERM=xterm-256color LANG=C.UTF-8 SHELL=/bin/bash USER=root")
-            append(" /bin/bash -c")
-            append(" '/usr/local/bin/codex exec-server --listen ws://0.0.0.0:$port'")
-        }
-
-        log("发送 Termux 命令")
-        log("proot: $prootCmd.take(200)...")
-        return sendTermuxCmd(prootCmd)
-    }
-
-    private fun sendTermuxCmd(cmd: String): Boolean {
+    private fun launchProot(): Boolean {
         return try {
-            val intent = Intent().apply {
-                setClassName(TERMUX_PKG, TERMUX_SVC)
-                action = "$TERMUX_PKG.RUN_COMMAND"
-                putExtra("$TERMUX_PKG.RUN_COMMAND_PATH", TERMUX_BASH)
-                putExtra("$TERMUX_PKG.RUN_COMMAND_ARGUMENTS", arrayOf("-c", cmd))
-                putExtra("$TERMUX_PKG.RUN_COMMAND_WORKDIR", "/data/data/com.termux/files/home")
-                putExtra("$TERMUX_PKG.RUN_COMMAND_BACKGROUND_TASK", true)
-                putExtra("$TERMUX_PKG.RUN_COMMAND_SESSION_ACTION", "0")
+            // 1. 找到 native lib 目录（libproot.so 所在位置）
+            val libDir = findNativeLibDir()
+            if (libDir == null) {
+                log("找不到 native lib 目录"); err("无法找到 libproot.so"); return false
             }
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                startForegroundService(intent)
-            } else {
-                startService(intent)
+            log("native lib 目录: $libDir")
+
+            // 2. 确保临时目录
+            val tmpDir = File(filesDir, "tmp").also { it.mkdirs() }
+
+            // 3. 参数
+            val rootfs = File(filesDir, "linux-rootfs").absolutePath
+            val port = _wsPort
+
+            // 4. 构建 shell 脚本内容（关键！用脚本文件绕过 ProcessBuilder 环境变量问题）
+            val script = buildString {
+                append("#!/system/bin/sh\n")
+                append("export LD_LIBRARY_PATH=$libDir\n")
+                append("export PROOT_LOADER=$libDir/libproot-loader.so\n")
+                append("export PROOT_TMP_DIR=$tmpDir\n")
+                // 执行 proot
+                append("exec $libDir/libproot.so")
+                append(" --rootfs='$rootfs'")
+                append(" --root-id")
+                append(" --kill-on-exit")
+                append(" -b /dev")
+                append(" -b /proc")
+                append(" -b /sys")
+                append(" -b /storage")
+                append(" -w /root")
+                // 清理环境，只传递需要的最小变量
+                append(" /usr/bin/env -i")
+                append(" HOME=/root")
+                append(" PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin")
+                append(" TERM=xterm-256color")
+                append(" LANG=C.UTF-8")
+                append(" SHELL=/bin/bash")
+                append(" USER=root")
+                append(" /bin/bash -c")
+                append(" '/usr/local/bin/codex exec-server --listen ws://0.0.0.0:$port'")
+                append("\n")
             }
+
+            // 5. 写入脚本文件
+            val scriptFile = File(filesDir, "start_codex.sh")
+            scriptFile.writeText(script)
+            scriptFile.setExecutable(true)
+            log("脚本已写入: ${scriptFile.absolutePath}")
+
+            // 6. 使用 ProcessBuilder 执行脚本
+            val pb = ProcessBuilder("sh", scriptFile.absolutePath)
+                .directory(filesDir)
+                .redirectErrorStream(true)
+
+            log("启动 proot...")
+            codexProcess = pb.start()
+
+            // 7. 启动日志读取线程
+            scope.launch(Dispatchers.IO) {
+                try {
+                    codexProcess!!.inputStream.bufferedReader().use { reader ->
+                        var line: String?
+                        while (reader.readLine().also { line = it } != null) {
+                            if (line!!.isNotBlank()) log("proot: $line")
+                        }
+                    }
+                } catch (e: Exception) {
+                    Log.w(TAG, "日志读取结束: ${e.message}")
+                }
+            }
+
+            // 8. 监控进程
+            scope.launch(Dispatchers.IO) {
+                try {
+                    val exit = codexProcess!!.waitFor()
+                    log("proot 进程退出: $exit")
+                    if (isRunning) {
+                        _state.value = RuntimeState.ERROR
+                        updateNotify("Codex 异常退出")
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "进程监控异常", e)
+                }
+            }
+
             true
         } catch (e: Exception) {
-            log("Termux 命令失败: ${e.message}")
+            log("启动失败: ${e.message}")
+            Log.e(TAG, "launchProot 异常", e)
             false
         }
     }
 
-    // ─── 停止 ─────────────────────────────────────────────────────
+    /**
+     * 查找 App 的 native lib 目录。
+     * 在 Android 上，原生库会被提取到 /data/app/<random>/lib/arm64/。
+     */
+    private fun findNativeLibDir(): String? {
+        try {
+            val appInfo = packageManager.getApplicationInfo(packageName, 0)
+            val libDir = appInfo.nativeLibraryDir
+            if (libDir != null && File(libDir).exists()) return libDir
+
+            // 备用：手动查找
+            val appDir = File(appInfo.sourceDir).parentFile
+            val lib = File(appDir, "lib/arm64")
+            if (lib.exists()) return lib.absolutePath
+
+            return null
+        } catch (e: Exception) {
+            Log.w(TAG, "查找 lib 目录失败", e)
+            return null
+        }
+    }
+
+    // ─── 停止 ─────────────────────────────────────────────────
 
     private fun stopCodex() {
         isRunning = false
-        sendTermuxCmd("pkill -f 'codex exec-server' 2>/dev/null; echo ok")
+        codexProcess?.let {
+            try { it.destroyForcibly() } catch (_: Exception) {}
+        }
+        codexProcess = null
         _state.value = RuntimeState.STOPPED
     }
 
-    // ─── 工具 ─────────────────────────────────────────────────────
+    // ─── 工具 ─────────────────────────────────────────────────
 
     private fun findFreePort(start: Int): Int {
         var p = start
@@ -257,17 +299,17 @@ class CodexRuntimeService : Service() {
             putExtra("state", _state.value.name)
             putExtra("wsPort", _wsPort)
             putExtra("isRunning", isRunning)
-            putExtra("runningMode", _mode)
         })
     }
 
-    // ─── 日志 ─────────────────────────────────────────────────────
+    // ─── 日志 ─────────────────────────────────────────────────
 
     private val logLock = Any()
     private val MAX_LOG = 200
 
     private fun log(msg: String) {
-        val ts = java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.getDefault()).format(java.util.Date())
+        val ts = java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.getDefault())
+            .format(java.util.Date())
         synchronized(logLock) {
             _logs.value = (_logs.value + "[$ts] $msg").takeLast(MAX_LOG)
         }
@@ -280,22 +322,27 @@ class CodexRuntimeService : Service() {
         updateNotify("错误: $msg")
     }
 
-    // ─── 通知 ─────────────────────────────────────────────────────
+    // ─── 通知 ─────────────────────────────────────────────────
 
     private fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             getSystemService(NotificationManager::class.java).createNotificationChannel(
-                NotificationChannel(CHANNEL_ID, "Codex 运行时", NotificationManager.IMPORTANCE_LOW).apply {
-                    description = "Codex 后台服务"; setShowBadge(false)
+                NotificationChannel(CHANNEL_ID, "Codex 运行时",
+                    NotificationManager.IMPORTANCE_LOW
+                ).apply {
+                    description = "Codex 后台服务"
+                    setShowBadge(false)
                 }
             )
         }
     }
 
     private fun notify(text: String): Notification {
-        val pi = PendingIntent.getActivity(this, 0,
+        val pi = PendingIntent.getActivity(
+            this, 0,
             packageManager.getLaunchIntentForPackage(packageName),
-            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        )
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle("Codex")
             .setContentText(text)
@@ -307,6 +354,7 @@ class CodexRuntimeService : Service() {
     }
 
     private fun updateNotify(text: String) {
-        getSystemService(NotificationManager::class.java).notify(NOTIFICATION_ID, notify(text))
+        getSystemService(NotificationManager::class.java)
+            .notify(NOTIFICATION_ID, notify(text))
     }
 }
