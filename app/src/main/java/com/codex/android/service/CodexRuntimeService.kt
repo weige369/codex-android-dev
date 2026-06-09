@@ -214,28 +214,31 @@ class CodexRuntimeService : Service() {
 
     private fun tryShizuku(scriptFile: File): Boolean {
         return try {
-            // 通过反射调用 Shizuku API，避免编译期依赖
-            val cls = Class.forName("moe.shizuku.api.ShizukuClient")
-            val ready = cls.getMethod("isShizukuReady").invoke(null) as? Boolean ?: false
-            if (!ready) { log("Shizuku 未就绪"); return false }
-
+            // 新版 Shizuku API (rikka.shizuku.Shizuku, v13.x)
+            val shizukuCls = Class.forName("rikka.shizuku.Shizuku")
+            
+            // 检查 Shizuku binder 是否可用
+            val pingMethod = shizukuCls.getMethod("pingBinder")
+            val binderAlive = pingMethod.invoke(null) as? Boolean ?: false
+            if (!binderAlive) { log("Shizuku binder 不可用"); return false }
+            
             log("通过 Shizuku 执行脚本...")
-            // 使用 Runtime 在 shizuku 环境中执行
-            // Shizuku 的本质是：用 Shizuku binder 代理可以获得 shell UID 的进程
-            // 我们通过 Shizuku 的 newProcess 或直接通过反射创建
-
-            // 最简单的方式：用 shizuku 的 execute 方法
-            val service = cls.getMethod("getService").invoke(null)
-            val execMethod = service.javaClass.getMethod("exec",
-                Array<String>::class.java, String::class.java, String::class.java, Int::class.javaPrimitiveType)
-
-            val result = execMethod.invoke(service,
-                arrayOf("/system/bin/sh", scriptFile.absolutePath),
-                filesDir.absolutePath,  // cwd
-                null,  // env
-                0      // flags
+            
+            // 获取 binder 并创建 IShizukuService
+            val binder = shizukuCls.getMethod("getBinder").invoke(null)
+            val stub = Class.forName("rikka.shizuku.IShizukuService\$Stub")
+            val service = stub.getMethod("asInterface", android.os.IBinder::class.java).invoke(null, binder)
+            
+            // newProcess(String[] cmd, String[] env, String cwd)
+            val cmd = arrayOf("/system/bin/sh", scriptFile.absolutePath)
+            val newProcessMethod = service.javaClass.getMethod(
+                "newProcess",
+                Array<String>::class.java,
+                Array<String>::class.java,
+                String::class.java
             )
-
+            newProcessMethod.invoke(service, cmd, arrayOf<String>(), filesDir.absolutePath)
+            
             log("Shizuku 进程已启动")
             true
         } catch (e: Exception) {

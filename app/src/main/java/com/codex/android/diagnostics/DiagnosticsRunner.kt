@@ -189,7 +189,7 @@ class DiagnosticsRunner(private val context: Context) {
         // Shizuku 检测
         var shizukuError: Exception? = null
         val hasShizuku = try {
-            Class.forName("moe.shizuku.api.ShizukuApi")
+            Class.forName("rikka.shizuku.Shizuku")
             true
         } catch (e: Exception) {
             Log.w(TAG, "Shizuku API 类存在性检查失败", e)
