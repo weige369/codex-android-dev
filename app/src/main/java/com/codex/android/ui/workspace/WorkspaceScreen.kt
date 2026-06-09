@@ -305,7 +305,7 @@ private fun WebViewContainer(
                     }
                 }
 
-                loadUrl("file:///android_asset/web/codex-ui.html")
+                loadUrl("file:///android_asset/web-chat/index.html")
 
                 // Expose WebView reference for status forwarding
                 onWebViewReady?.invoke(this)
