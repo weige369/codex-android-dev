@@ -384,7 +384,9 @@ class CodexRuntimeService : Service() {
             addLog("--- proot 验证 (echo+id) ---")
             try {
                 val testCmd = linuxEnv.buildProotCommand("echo 'proot_ok' && id")
-                val testEnv = linuxEnv.getProotEnv().toMutableMap().apply { remove("LD_LIBRARY_PATH") }
+                val testEnv = linuxEnv.getProotEnv()
+                // 不要移除 LD_LIBRARY_PATH — proot 自身需要它来加载 libtalloc.so 等
+                // proot 内部由 env -i 清空环境变量，不会干扰 Ubuntu glibc
                 addLog("proot 验证命令: ${testCmd.joinToString(" ")}")
                 val testProcess = ProcessBuilder(testCmd)
                     .apply {
@@ -418,7 +420,7 @@ class CodexRuntimeService : Service() {
             try {
                 val probeCmd = "/usr/local/bin/codex --help 2>&1 || /usr/local/bin/codex --version 2>&1 || echo 'codex_binary_failed'"
                 val probeFullCmd = linuxEnv.buildProotCommand(probeCmd)
-                val probeEnv = linuxEnv.getProotEnv().toMutableMap().apply { remove("LD_LIBRARY_PATH") }
+                val probeEnv = linuxEnv.getProotEnv()
                 val probeProcess = ProcessBuilder(probeFullCmd)
                     .apply {
                         environment().putAll(probeEnv)
@@ -449,15 +451,13 @@ class CodexRuntimeService : Service() {
             val cmd = linuxEnv.buildProotCommand(launchCmd)
             addLog("完整 proot 命令: ${cmd.joinToString(" ")}")
             val prootEnv = linuxEnv.getProotEnv()
-            // 清理可能冲突的 LD_LIBRARY_PATH（proot 内 Ubuntu 用 glibc，不需要 Android libs）
-            val cleanEnv = prootEnv.toMutableMap().apply {
-                remove("LD_LIBRARY_PATH")
-            }
-            addLog("环境变量 (${cleanEnv.size}): ${cleanEnv.keys.take(5).joinToString()}")
+            // 保留完整 env — LD_LIBRARY_PATH 是 proot 自身需要的
+            // proot 内部由 buildProotCommand 中的 env -i 清空环境，不会干扰 Ubuntu glibc
+            addLog("环境变量 (${prootEnv.size}): ${prootEnv.keys.take(5).joinToString()}")
 
             codexProcess = ProcessBuilder(cmd)
                 .apply {
-                    environment().putAll(cleanEnv)
+                    environment().putAll(prootEnv)
                     redirectErrorStream(false)
                 }
                 .start()
