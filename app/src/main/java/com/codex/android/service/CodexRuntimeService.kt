@@ -413,9 +413,37 @@ class CodexRuntimeService : Service() {
             }
             addLog("--- 验证结束 ---")
 
-            // 构建启动命令 — 尝试 exec-server（Codex 0.133.0 标准子命令）
+            // 第二轮验证：codex 二进制在 proot 内能否执行
+            addLog("--- codex 二进制验证 ---")
+            try {
+                val probeCmd = "/usr/local/bin/codex --help 2>&1 || /usr/local/bin/codex --version 2>&1 || echo 'codex_binary_failed'"
+                val probeFullCmd = linuxEnv.buildProotCommand(probeCmd)
+                val probeEnv = linuxEnv.getProotEnv().toMutableMap().apply { remove("LD_LIBRARY_PATH") }
+                val probeProcess = ProcessBuilder(probeFullCmd)
+                    .apply {
+                        environment().putAll(probeEnv)
+                        redirectErrorStream(true)
+                    }
+                    .start()
+                val probeLines = mutableListOf<String>()
+                probeProcess.inputStream.bufferedReader().use { reader ->
+                    var line = reader.readLine()
+                    while (line != null) {
+                        probeLines.add(line)
+                        line = reader.readLine()
+                    }
+                }
+                val probeFinished = probeProcess.waitFor(20, java.util.concurrent.TimeUnit.SECONDS)
+                val probeExit = if (probeFinished) probeProcess.exitValue() else -999
+                addLog("codex 验证: exit=$probeExit, lines=${probeLines.size}")
+                probeLines.take(10).forEach { addLog("  codex: $it") }
+            } catch (e: Exception) {
+                addLog("codex 验证异常: ${e.javaClass.simpleName}: ${e.message}")
+            }
+            addLog("--- codex 验证结束 ---")
+
+            // 构建启动命令
             addLog("通过 proot 启动 Codex exec-server...")
-            // 依次尝试多种命令格式
             val launchCmd = "echo '[codex] starting exec-server...' && exec /usr/local/bin/codex exec-server --port $_wsPort --http-port ${_wsPort + 1}"
             addLog("启动命令: $launchCmd")
             val cmd = linuxEnv.buildProotCommand(launchCmd)
