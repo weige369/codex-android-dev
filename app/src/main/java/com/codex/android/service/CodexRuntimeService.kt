@@ -376,22 +376,23 @@ class CodexRuntimeService : Service() {
             val setExecOk = codexInRootfs.setExecutable(true)
             addLog("Codex 二进制已安装到 rootfs: ${codexInRootfs.absolutePath} (${codexInRootfs.length()} bytes, executable=$setExecOk)")
 
-            // 先做最小 proot 验证 — 通过 sh -c 执行（与 shell 测试一致）
+            // 先做最小 proot 验证 — 使用与 run-as 完全一致的命令格式
             addLog("--- proot 验证 (echo+id) ---")
             try {
                 val testCmd = linuxEnv.buildProotCommand("echo 'proot_ok' && id")
                 val testEnv = linuxEnv.getProotEnv()
                 addLog("proot 验证命令: ${testCmd.joinToString(" ")}")
                 addLog("LD_LIBRARY_PATH=${testEnv["LD_LIBRARY_PATH"]}")
-                // 通过 sh -c 启动，与 run-as shell 测试保持一致
-                // 先构建环境变量 export 语句
+                
+                // 构造 export 语句（单引号防空格/特殊字符）
                 val envExports = testEnv.map { (k, v) -> "export $k='$v'" }.joinToString("; ")
-                val shellCmd = "$envExports; ${testCmd.joinToString(" ")}"
+                // 使用完整 shell 命令，包含引号保护
+                val prootArgs = testCmd.joinToString(" ") { arg -> "'$arg'" }
+                val shellCmd = "$envExports; exec $prootArgs"
                 addLog("shell 命令: $shellCmd")
                 val testProcess = ProcessBuilder("sh", "-c", shellCmd)
                     .redirectErrorStream(true)
                     .start()
-                // 用 readLine 逐行读取避免阻塞
                 val testLines = mutableListOf<String>()
                 testProcess.inputStream.bufferedReader().use { reader ->
                     var line = reader.readLine()
@@ -415,12 +416,13 @@ class CodexRuntimeService : Service() {
             // 第二轮验证：codex 二进制在 proot 内能否执行
             addLog("--- codex 二进制验证 ---")
             try {
+                val infoEnv = linuxEnv.getProotEnv()
+                val envExportsCmd = { env: Map<String,String> -> env.map { (k, v) -> "export $k='$v'" }.joinToString("; ") }
+                val wrapShell = { cmd: List<String> -> "$envExportsCmd(infoEnv); exec ${cmd.joinToString(" ") { "'$it'" }}" }
+                
                 // 先检查二进制基本信息
                 val infoCmd = "ls -la /usr/local/bin/codex && echo '---size_ok---'"
-                val infoFullCmd = linuxEnv.buildProotCommand(infoCmd)
-                val infoEnv = linuxEnv.getProotEnv()
-                val infoEnvExports = infoEnv.map { (k, v) -> "export $k='$v'" }.joinToString("; ")
-                val infoShellCmd = "$infoEnvExports; ${infoFullCmd.joinToString(" ")}"
+                val infoShellCmd = wrapShell(linuxEnv.buildProotCommand(infoCmd))
                 val infoProcess = ProcessBuilder("sh", "-c", infoShellCmd)
                     .redirectErrorStream(true)
                     .start()
@@ -432,12 +434,9 @@ class CodexRuntimeService : Service() {
                 infoProcess.waitFor(15, java.util.concurrent.TimeUnit.SECONDS)
                 addLog("codex file 信息: ${infoLines.joinToString(" | ")}")
                 
-                // 尝试执行
+                // 尝试执行 codex --help
                 val probeCmd = "/usr/local/bin/codex --help 2>&1; E=\$?; echo \"EXIT=\$E\"; if [ \$E -ne 0 ]; then echo 'codex_failed_exit='\$E; fi"
-                val probeFullCmd = linuxEnv.buildProotCommand(probeCmd)
-                val probeEnv = linuxEnv.getProotEnv()
-                val probeEnvExports = probeEnv.map { (k, v) -> "export $k='$v'" }.joinToString("; ")
-                val probeShellCmd = "$probeEnvExports; ${probeFullCmd.joinToString(" ")}"
+                val probeShellCmd = wrapShell(linuxEnv.buildProotCommand(probeCmd))
                 val probeProcess = ProcessBuilder("sh", "-c", probeShellCmd)
                     .redirectErrorStream(true)
                     .start()
@@ -467,11 +466,12 @@ class CodexRuntimeService : Service() {
             val prootEnv = linuxEnv.getProotEnv()
             addLog("环境变量 (${prootEnv.size}): ${prootEnv.keys.take(5).joinToString()}")
 
-            // 通过 sh -c 启动（与验证阶段和 shell 测试保持一致）
-            val envExports = prootEnv.map { (k, v) -> "export $k='$v'" }.joinToString("; ")
-            val shellCmd = "$envExports; ${cmd.joinToString(" ")}"
-            addLog("shell 启动命令: $shellCmd")
-            codexProcess = ProcessBuilder("sh", "-c", shellCmd)
+            // 通过 sh -c + exec 启动
+            val startEnvExports = prootEnv.map { (k, v) -> "export $k='$v'" }.joinToString("; ")
+            val startProotArgs = cmd.joinToString(" ") { "'$it'" }
+            val shellStartCmd = "$startEnvExports; exec $startProotArgs"
+            addLog("shell 启动命令: $shellStartCmd")
+            codexProcess = ProcessBuilder("sh", "-c", shellStartCmd)
                 .redirectErrorStream(false)
                 .start()
             isRunning = true
