@@ -62,7 +62,8 @@ fun WorkspaceScreen(
     val isRunning = runtimeState == RuntimeState.RUNNING
     val isStarting = runtimeState == RuntimeState.STARTING ||
                      runtimeState == RuntimeState.DOWNLOADING ||
-                     runtimeState == RuntimeState.EXTRACTING
+                     runtimeState == RuntimeState.EXTRACTING ||
+                     runtimeState == RuntimeState.INSTALLING
     val hasError = runtimeState == RuntimeState.ERROR
 
     Column(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
@@ -186,12 +187,17 @@ private fun StartPlaceholder(
                 CircularProgressIndicator(color = CodexPrimary, modifier = Modifier.size(48.dp))
                 Spacer(Modifier.height(16.dp))
                 Text("正在启动 Codex...", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            } else if (runtimeState == RuntimeState.INSTALLING) {
+                CircularProgressIndicator(color = CodexPrimary, modifier = Modifier.size(48.dp))
+                Spacer(Modifier.height(16.dp))
+                Text("正在安装到 rootfs...", color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
 
             // 显示运行时日志（下载/启动过程中）
             if (runtimeState == RuntimeState.DOWNLOADING || 
                 runtimeState == RuntimeState.EXTRACTING || 
                 runtimeState == RuntimeState.STARTING ||
+                runtimeState == RuntimeState.INSTALLING ||
                 runtimeState == RuntimeState.ERROR) {
                 val logs by CodexRuntimeService.logs.collectAsState()
                 if (logs.isNotEmpty()) {

@@ -41,7 +41,8 @@ fun AgentStatusBar(
             RuntimeState.RUNNING -> StatusOnline
             RuntimeState.STARTING,
             RuntimeState.DOWNLOADING,
-            RuntimeState.EXTRACTING -> StatusWarning
+            RuntimeState.EXTRACTING,
+            RuntimeState.INSTALLING -> StatusWarning
             RuntimeState.ERROR -> StatusError
             RuntimeState.STOPPED -> StatusOffline
         },
@@ -122,6 +123,10 @@ private fun Badge(
             Triple("启动中", StatusWarning.copy(alpha = 0.15f), StatusWarning)
         state == RuntimeState.DOWNLOADING ->
             Triple("下载中", StatusWarning.copy(alpha = 0.15f), StatusWarning)
+        state == RuntimeState.EXTRACTING ->
+            Triple("解压中", StatusWarning.copy(alpha = 0.15f), StatusWarning)
+        state == RuntimeState.INSTALLING ->
+            Triple("安装中", StatusWarning.copy(alpha = 0.15f), StatusWarning)
         else ->
             Triple("已停止", StatusOffline.copy(alpha = 0.15f), StatusOffline)
     }
@@ -146,6 +151,7 @@ private fun statusText(state: RuntimeState, connected: Boolean): String {
         RuntimeState.STOPPED -> "Codex 已停止"
         RuntimeState.DOWNLOADING -> "正在下载 Codex CLI..."
         RuntimeState.EXTRACTING -> "正在解压..."
+        RuntimeState.INSTALLING -> "正在安装到 rootfs..."
         RuntimeState.STARTING -> "正在启动..."
         RuntimeState.RUNNING -> if (connected) "Codex 运行中" else "Codex 已启动"
         RuntimeState.ERROR -> "Codex 运行异常"
