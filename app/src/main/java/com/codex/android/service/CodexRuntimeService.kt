@@ -418,7 +418,27 @@ class CodexRuntimeService : Service() {
             // 第二轮验证：codex 二进制在 proot 内能否执行
             addLog("--- codex 二进制验证 ---")
             try {
-                val probeCmd = "/usr/local/bin/codex --help 2>&1 || /usr/local/bin/codex --version 2>&1 || echo 'codex_binary_failed'"
+                // 先检查二进制基本信息
+                val infoCmd = "ls -la /usr/local/bin/codex && echo '---size_ok---'"
+                val infoFullCmd = linuxEnv.buildProotCommand(infoCmd)
+                val infoEnv = linuxEnv.getProotEnv()
+                val infoProcess = ProcessBuilder(infoFullCmd)
+                    .apply {
+                        environment().putAll(infoEnv)
+                        redirectErrorStream(true)
+                    }
+                    .start()
+                val infoLines = mutableListOf<String>()
+                infoProcess.inputStream.bufferedReader().use { reader ->
+                    var line = reader.readLine()
+                    while (line != null) { infoLines.add(line); line = reader.readLine() }
+                }
+                infoProcess.waitFor(15, java.util.concurrent.TimeUnit.SECONDS)
+                addLog("codex file 信息: ${infoLines.joinToString(" | ")}")
+                
+                // 尝试执行
+                // 尝试执行 — 使用 strace 风格捕获错误
+                val probeCmd = "/usr/local/bin/codex --help 2>&1; E=\$?; echo \"EXIT=\$E\"; if [ \$E -ne 0 ]; then echo 'codex_failed_exit='\$E; fi"
                 val probeFullCmd = linuxEnv.buildProotCommand(probeCmd)
                 val probeEnv = linuxEnv.getProotEnv()
                 val probeProcess = ProcessBuilder(probeFullCmd)
