@@ -196,8 +196,8 @@ private fun StartPlaceholder(
                 val logs by CodexRuntimeService.logs.collectAsState()
                 if (logs.isNotEmpty()) {
                     Spacer(Modifier.height(16.dp))
-                    // 复制按钮
-                    val clipboardManager = LocalClipboardManager.current
+                    // 复制按钮 — 使用 Android ClipboardManager 确保可靠性
+                    val context = androidx.compose.ui.platform.LocalContext.current
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
@@ -206,7 +206,8 @@ private fun StartPlaceholder(
                         Text("Runtime 日志", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         TextButton(onClick = {
                             val fullLog = logs.joinToString("\n")
-                            clipboardManager.setText(AnnotatedString(fullLog))
+                            val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                            clipboard.setPrimaryClip(android.content.ClipData.newPlainText("Runtime Logs", fullLog))
                         }) {
                             Icon(Icons.Outlined.ContentCopy, null, modifier = Modifier.size(14.dp))
                             Spacer(Modifier.width(4.dp))

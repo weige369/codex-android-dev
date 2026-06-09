@@ -376,19 +376,20 @@ class CodexRuntimeService : Service() {
             val setExecOk = codexInRootfs.setExecutable(true)
             addLog("Codex 二进制已安装到 rootfs: ${codexInRootfs.absolutePath} (${codexInRootfs.length()} bytes, executable=$setExecOk)")
 
-            // 先做最小 proot 验证 — 检查 proot + bash 能否工作
+            // 先做最小 proot 验证 — 通过 sh -c 执行（与 shell 测试一致）
             addLog("--- proot 验证 (echo+id) ---")
             try {
                 val testCmd = linuxEnv.buildProotCommand("echo 'proot_ok' && id")
                 val testEnv = linuxEnv.getProotEnv()
-                // 不要移除 LD_LIBRARY_PATH — proot 自身需要它来加载 libtalloc.so 等
-                // proot 内部由 env -i 清空环境变量，不会干扰 Ubuntu glibc
                 addLog("proot 验证命令: ${testCmd.joinToString(" ")}")
-                val testProcess = ProcessBuilder(testCmd)
-                    .apply {
-                        environment().putAll(testEnv)
-                        redirectErrorStream(true)
-                    }
+                addLog("LD_LIBRARY_PATH=${testEnv["LD_LIBRARY_PATH"]}")
+                // 通过 sh -c 启动，与 run-as shell 测试保持一致
+                // 先构建环境变量 export 语句
+                val envExports = testEnv.map { (k, v) -> "export $k='$v'" }.joinToString("; ")
+                val shellCmd = "$envExports; ${testCmd.joinToString(" ")}"
+                addLog("shell 命令: $shellCmd")
+                val testProcess = ProcessBuilder("sh", "-c", shellCmd)
+                    .redirectErrorStream(true)
                     .start()
                 // 用 readLine 逐行读取避免阻塞
                 val testLines = mutableListOf<String>()
@@ -418,11 +419,10 @@ class CodexRuntimeService : Service() {
                 val infoCmd = "ls -la /usr/local/bin/codex && echo '---size_ok---'"
                 val infoFullCmd = linuxEnv.buildProotCommand(infoCmd)
                 val infoEnv = linuxEnv.getProotEnv()
-                val infoProcess = ProcessBuilder(infoFullCmd)
-                    .apply {
-                        environment().putAll(infoEnv)
-                        redirectErrorStream(true)
-                    }
+                val infoEnvExports = infoEnv.map { (k, v) -> "export $k='$v'" }.joinToString("; ")
+                val infoShellCmd = "$infoEnvExports; ${infoFullCmd.joinToString(" ")}"
+                val infoProcess = ProcessBuilder("sh", "-c", infoShellCmd)
+                    .redirectErrorStream(true)
                     .start()
                 val infoLines = mutableListOf<String>()
                 infoProcess.inputStream.bufferedReader().use { reader ->
@@ -433,15 +433,13 @@ class CodexRuntimeService : Service() {
                 addLog("codex file 信息: ${infoLines.joinToString(" | ")}")
                 
                 // 尝试执行
-                // 尝试执行 — 使用 strace 风格捕获错误
                 val probeCmd = "/usr/local/bin/codex --help 2>&1; E=\$?; echo \"EXIT=\$E\"; if [ \$E -ne 0 ]; then echo 'codex_failed_exit='\$E; fi"
                 val probeFullCmd = linuxEnv.buildProotCommand(probeCmd)
                 val probeEnv = linuxEnv.getProotEnv()
-                val probeProcess = ProcessBuilder(probeFullCmd)
-                    .apply {
-                        environment().putAll(probeEnv)
-                        redirectErrorStream(true)
-                    }
+                val probeEnvExports = probeEnv.map { (k, v) -> "export $k='$v'" }.joinToString("; ")
+                val probeShellCmd = "$probeEnvExports; ${probeFullCmd.joinToString(" ")}"
+                val probeProcess = ProcessBuilder("sh", "-c", probeShellCmd)
+                    .redirectErrorStream(true)
                     .start()
                 val probeLines = mutableListOf<String>()
                 probeProcess.inputStream.bufferedReader().use { reader ->
@@ -467,15 +465,14 @@ class CodexRuntimeService : Service() {
             val cmd = linuxEnv.buildProotCommand(launchCmd)
             addLog("完整 proot 命令: ${cmd.joinToString(" ")}")
             val prootEnv = linuxEnv.getProotEnv()
-            // 保留完整 env — LD_LIBRARY_PATH 是 proot 自身需要的
-            // proot 内部由 buildProotCommand 中的 env -i 清空环境，不会干扰 Ubuntu glibc
             addLog("环境变量 (${prootEnv.size}): ${prootEnv.keys.take(5).joinToString()}")
 
-            codexProcess = ProcessBuilder(cmd)
-                .apply {
-                    environment().putAll(prootEnv)
-                    redirectErrorStream(false)
-                }
+            // 通过 sh -c 启动（与验证阶段和 shell 测试保持一致）
+            val envExports = prootEnv.map { (k, v) -> "export $k='$v'" }.joinToString("; ")
+            val shellCmd = "$envExports; ${cmd.joinToString(" ")}"
+            addLog("shell 启动命令: $shellCmd")
+            codexProcess = ProcessBuilder("sh", "-c", shellCmd)
+                .redirectErrorStream(false)
                 .start()
             isRunning = true
             addLog("proot 进程已启动，PID 暂不可知")
