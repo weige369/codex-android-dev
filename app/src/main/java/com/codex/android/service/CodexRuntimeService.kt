@@ -136,7 +136,7 @@ class CodexRuntimeService : Service() {
         val ok = withContext(Dispatchers.IO) {
             codexManager.downloadWithProgress { p, t ->
                 val pct = if (t > 0) (p * 100 / t) else 0
-                if (pct % 5 == 0) { log("下载 $pct%"); updateNotify("下载 $pct%") }
+                if (pct % 5L == 0L) { log("下载 $pct%"); updateNotify("下载 $pct%") }
             }
         }
         if (!ok) { err("下载失败"); return false }
