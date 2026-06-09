@@ -16,6 +16,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -194,6 +196,23 @@ private fun StartPlaceholder(
                 val logs by CodexRuntimeService.logs.collectAsState()
                 if (logs.isNotEmpty()) {
                     Spacer(Modifier.height(16.dp))
+                    // 复制按钮
+                    val clipboardManager = LocalClipboardManager.current
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("Runtime 日志", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        TextButton(onClick = {
+                            val fullLog = logs.joinToString("\n")
+                            clipboardManager.setText(AnnotatedString(fullLog))
+                        }) {
+                            Icon(Icons.Outlined.ContentCopy, null, modifier = Modifier.size(14.dp))
+                            Spacer(Modifier.width(4.dp))
+                            Text("一键复制", fontSize = 11.sp)
+                        }
+                    }
                     Surface(
                         modifier = Modifier
                             .fillMaxWidth()
