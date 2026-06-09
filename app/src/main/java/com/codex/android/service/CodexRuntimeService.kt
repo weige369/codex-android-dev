@@ -45,7 +45,6 @@ class CodexRuntimeService : Service() {
         private const val ACTION_STATUS = "com.codex.android.action.CODEX_STATUS"
 
         const val DEFAULT_WS_PORT = 9877
-        const val DEFAULT_HTTP_PORT = 19327
 
         private val _state = MutableStateFlow(RuntimeState.STOPPED)
         val state: StateFlow<RuntimeState> = _state.asStateFlow()
@@ -201,7 +200,6 @@ class CodexRuntimeService : Service() {
             codexManager.workspaceDir.mkdirs()
             _wsPort = findFreePort(DEFAULT_WS_PORT)
             addLog("WebSocket 端口: $_wsPort")
-            addLog("即将分配的 HTTP 端口: ${_wsPort + 1}")
 
             // 启动 Codex — 根据运行模式选择正确路径
             _state.value = RuntimeState.STARTING
@@ -276,9 +274,7 @@ class CodexRuntimeService : Service() {
             val process = ProcessBuilder(
                 codexManager.codexBinary.absolutePath,
                 "exec-server",
-                "--port", _wsPort.toString(),
-                "--http-port", (_wsPort + 1).toString(),
-                "--skip-git-repo-check"
+                "--listen", "ws://0.0.0.0:$_wsPort"
             ).apply {
                 redirectErrorStream(true)
                 environment()["CODEX_CONFIG_DIR"] = codexManager.getConfigDir().absolutePath
@@ -464,9 +460,9 @@ class CodexRuntimeService : Service() {
             }
             addLog("--- codex 验证结束 ---")
 
-            // 构建启动命令
+            // 构建启动命令 — 使用 --listen 指定 WebSocket 端点
             addLog("通过 proot 启动 Codex exec-server...")
-            val launchCmd = "echo '[codex] starting exec-server...' && exec /usr/local/bin/codex exec-server --port $_wsPort --http-port ${_wsPort + 1}"
+            val launchCmd = "echo '[codex] starting exec-server...' && exec /usr/local/bin/codex exec-server --listen ws://0.0.0.0:$_wsPort"
             addLog("启动命令: $launchCmd")
             val cmd = linuxEnv.buildProotCommand(launchCmd)
             addLog("完整 proot 命令: ${cmd.joinToString(" ")}")
