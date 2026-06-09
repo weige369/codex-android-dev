@@ -417,12 +417,12 @@ class CodexRuntimeService : Service() {
             addLog("--- codex 二进制验证 ---")
             try {
                 val infoEnv = linuxEnv.getProotEnv()
-                val envExportsCmd = { env: Map<String,String> -> env.map { (k, v) -> "export $k='$v'" }.joinToString("; ") }
-                val wrapShell = { cmd: List<String> -> "$envExportsCmd(infoEnv); exec ${cmd.joinToString(" ") { "'$it'" }}" }
+                val infoEnvExports = infoEnv.entries.joinToString("; ") { (k, v) -> "export $k='$v'" }
                 
                 // 先检查二进制基本信息
                 val infoCmd = "ls -la /usr/local/bin/codex && echo '---size_ok---'"
-                val infoShellCmd = wrapShell(linuxEnv.buildProotCommand(infoCmd))
+                val infoProotArgs = linuxEnv.buildProotCommand(infoCmd)
+                val infoShellCmd = "$infoEnvExports; exec ${infoProotArgs.joinToString(" ") { "'$it'" }}"
                 val infoProcess = ProcessBuilder("sh", "-c", infoShellCmd)
                     .redirectErrorStream(true)
                     .start()
@@ -436,7 +436,8 @@ class CodexRuntimeService : Service() {
                 
                 // 尝试执行 codex --help
                 val probeCmd = "/usr/local/bin/codex --help 2>&1; E=\$?; echo \"EXIT=\$E\"; if [ \$E -ne 0 ]; then echo 'codex_failed_exit='\$E; fi"
-                val probeShellCmd = wrapShell(linuxEnv.buildProotCommand(probeCmd))
+                val probeProotArgs = linuxEnv.buildProotCommand(probeCmd)
+                val probeShellCmd = "$infoEnvExports; exec ${probeProotArgs.joinToString(" ") { "'$it'" }}"
                 val probeProcess = ProcessBuilder("sh", "-c", probeShellCmd)
                     .redirectErrorStream(true)
                     .start()
